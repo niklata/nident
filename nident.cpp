@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-11-03 10:01:12 nk>
+ * Time-stamp: <2010-11-03 11:32:35 nk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -115,7 +115,15 @@ static void schedule_write(int fd);
 
 class IdentClient {
 public:
-    IdentClient(int fd) : fd_(fd) { state_ = STATE_WAITIN; }
+    IdentClient(int fd) : fd_(fd) {
+	state_ = STATE_WAITIN;
+	server_port_ = 0;
+	client_port_ = 0;
+    }
+    ~IdentClient() {
+	close(fd_);
+	log_line("fd %d: destructor called", fd_);
+    }
     enum IdentClientState {
 	STATE_WAITIN,
 	STATE_GOTIN,
@@ -127,7 +135,11 @@ public:
     std::string outbuf_;
     IdentClientState state_;
 
+    int server_port_;
+    int client_port_;
+
     bool process_input();
+    bool parse_request();
     bool create_reply();
     bool process_output();
 };
@@ -157,9 +169,108 @@ bool IdentClient::process_input()
 	}
 	inbuf_ += buf[i];
     }
-    if (state_ == STATE_GOTIN)
-	create_reply();
+    if (state_ == STATE_GOTIN) {
+	if (!create_reply())
+	    return false;
+    }
     return true;
+}
+
+// Returns false if the object needs to be destroyed by the caller.
+bool IdentClient::parse_request()
+{
+    enum ParseState {
+	ParseInvalid,
+	ParseServerPort,
+	ParseClientPort,
+	ParseDone
+    } state = ParseServerPort;
+    int prev_idx = 0;
+    size_t i;
+    bool found_num = false;
+    bool found_ws_after_num = false;
+    for (i = 0; i < inbuf_.size(); ++i) {
+	const char c = inbuf_.at(i);
+	if (state == ParseServerPort) {
+	    log_line("c is '%c'", c);
+	    switch (c) {
+		case ' ':
+		case '\t':
+		    log_line("ws");
+		    if (found_num)
+			found_ws_after_num = true;
+		    continue;
+		case ',': {
+		    std::string cport = inbuf_.substr(prev_idx, i);
+		    client_port_ = atoi(cport.c_str());
+		    state = ParseClientPort;
+		    prev_idx = i + 1;
+		    found_num = false;
+		    log_line("cport: %d", client_port_);
+		    continue;
+		}
+		case '0': case '1': case '2': case '3': case '4':
+		case '5': case '6': case '7': case '8': case '9':
+		    found_num = true;
+		    if (found_ws_after_num) {
+			state = ParseInvalid;
+			log_line("!");
+			return false;
+		    }
+		    log_line("#");
+		    continue;
+		default:
+		    state = ParseInvalid;
+		    log_line("!");
+		    return false;
+	    }
+	} else if (state == ParseClientPort) {
+	    log_line("c is '%c'", c);
+	    switch (c) {
+		case ' ':
+		case '\t':
+		    log_line("ws");
+		    if (found_num)
+			found_ws_after_num = true;
+		    continue;
+		case '\r':
+		case '\n': {
+		    std::string sport = inbuf_.substr(prev_idx, i);
+		    server_port_ = atoi(sport.c_str());
+		    state = ParseDone;
+		    log_line("sport: %d", server_port_);
+		    return true;
+		}
+		case '0': case '1': case '2': case '3': case '4':
+		case '5': case '6': case '7': case '8': case '9':
+		    found_num = true;
+		    if (found_ws_after_num) {
+			state = ParseInvalid;
+			log_line("!");
+			return false;
+		    }
+		    log_line("#");
+		    continue;
+		default:
+		    state = ParseInvalid;
+		    log_line("!");
+		    return false;
+	    }
+	}
+    }
+    log_line("state: %d", state);
+    if (state == ParseClientPort) {
+	log_line("... prev_idx: %d, i: %d", prev_idx, i);
+	std::string sport = inbuf_.substr(prev_idx, i);
+	log_line("sport string: %s", sport.c_str());
+	server_port_ = atoi(sport.c_str());
+	if (server_port_ != 0) {
+	    state = ParseDone;
+	    log_line("sport: %d", server_port_);
+	    return true;
+	}
+    }
+    return false;
 }
 
 // Forms a reply and schedules a write.
@@ -167,6 +278,10 @@ bool IdentClient::process_input()
 bool IdentClient::create_reply()
 {
     outbuf_.clear();
+    if (!parse_request()) {
+	return false;
+    }
+    log_line("serverport: %i\t clientport: %i", server_port_, client_port_);
     // XXX: do real work for a real response
     outbuf_ = "0,0:ERROR:NO-USER\r\n";
     state_ = STATE_WAITOUT;
@@ -207,7 +322,7 @@ static void schedule_read(int fd)
     ev.events = EPOLLIN;
     ev.data.fd = fd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1)
-	suicide("epoll_ctl failed");
+	suicide("schedule_read: epoll_ctl failed");
 }
 
 static void unschedule_read(int fd)
@@ -216,7 +331,7 @@ static void unschedule_read(int fd)
     ev.events = EPOLLIN;
     ev.data.fd = fd;
     if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev) == -1)
-	suicide("epoll_ctl failed");
+	suicide("unschedule_read: epoll_ctl failed");
 }
 
 static void schedule_write(int fd)
@@ -225,7 +340,7 @@ static void schedule_write(int fd)
     ev.events = EPOLLOUT;
     ev.data.fd = fd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1)
-	suicide("epoll_ctl failed");
+	suicide("schedule_write: epoll_ctl failed");
 }
 
 static void unschedule_write(int fd)
@@ -234,7 +349,7 @@ static void unschedule_write(int fd)
     ev.events = EPOLLOUT;
     ev.data.fd = fd;
     if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev) == -1)
-	suicide("epoll_ctl failed");
+	suicide("unschedule_write: epoll_ctl failed");
 }
 
 /* Abstracts away the details of accept()ing a socket connection. */
@@ -337,7 +452,7 @@ static void epoll_dispatch_work(void)
 		    if (!id->process_input()) {
 			unschedule_read(fd);
 			clientmap.erase(iter);
-			close(fd);
+			delete id;
 			continue;
 		    }
 		}
@@ -346,7 +461,7 @@ static void epoll_dispatch_work(void)
 		    if (!id->process_output()) {
 			unschedule_write(fd);
 			clientmap.erase(iter);
-			close(fd);
+			delete id;
 			continue;
 		    }
 		} else if (events[i].events & EPOLLHUP) {
@@ -356,7 +471,7 @@ static void epoll_dispatch_work(void)
 		    else if (id->state_ == IdentClient::STATE_WAITOUT)
 			unschedule_write(fd);
 		    clientmap.erase(iter);
-		    close(fd);
+		    delete id;
 		    continue;
 		}
 	    }
