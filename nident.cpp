@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-11-03 09:01:52 nk>
+ * Time-stamp: <2010-11-03 10:01:12 nk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -31,7 +31,6 @@
 
 #include <string>
 #include <map>
-#include <set>
 
 #include <unistd.h>
 #include <stdio.h>
@@ -197,7 +196,6 @@ bool IdentClient::process_output()
 }
 
 static std::map<int, IdentClient *> clientmap;
-static std::set<int> listenfds;
 
 static int epollfd;
 static struct epoll_event *events;
@@ -303,7 +301,6 @@ static void epoll_init(int *sockets)
 	    continue;
 	ev.events = EPOLLIN;
 	ev.data.fd = sockets[i];
-	listenfds.insert(ev.data.fd);
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, sockets[i], &ev) == -1)
 	    suicide("epoll_ctl failed");
 	log_line("added lsock = %i", sockets[i]);
@@ -328,20 +325,14 @@ static void epoll_dispatch_work(void)
 	for (int i = 0; i < ret; ++i) {
 	    int fd = events[i].data.fd;
 	    log_line("events[%i].data.fd = %i", i, fd);
-	    if (listenfds.find(fd) != listenfds.end()) {
+	    std::map<int, IdentClient *>::iterator iter = clientmap.find(fd);
+	    if (iter == clientmap.end()) {
 		if (events[i].events & EPOLLIN)
 		    accept_conns(fd);
 		else if (events[i].events & EPOLLHUP)
 		    suicide("listen fd got a HUP");
 	    } else {
-		std::map<int, IdentClient *>::iterator iter = clientmap.find(fd);
 		if (events[i].events & EPOLLIN) {
-		    if (iter == clientmap.end()) {
-			log_line("fd %i: EPOLLIN: no IdentClient associated", fd);
-			unschedule_read(fd);
-			close(fd);
-			continue;
-		    }
 		    IdentClient *id = iter->second;
 		    if (!id->process_input()) {
 			unschedule_read(fd);
@@ -351,12 +342,6 @@ static void epoll_dispatch_work(void)
 		    }
 		}
 		else if (events[i].events & EPOLLOUT) {
-		    if (iter == clientmap.end()) {
-			log_line("fd %i: EPOLLOUT: no IdentClient associated", fd);
-			unschedule_write(fd);
-			close(fd);
-			continue;
-		    }
 		    IdentClient *id = iter->second;
 		    if (!id->process_output()) {
 			unschedule_write(fd);
@@ -365,13 +350,6 @@ static void epoll_dispatch_work(void)
 			continue;
 		    }
 		} else if (events[i].events & EPOLLHUP) {
-		    if (iter == clientmap.end()) {
-			log_line("fd %i: EPOLLHUP: no IdentClient associated", fd);
-			unschedule_read(fd);
-			unschedule_write(fd);
-			close(fd);
-			continue;
-		    }
 		    IdentClient *id = iter->second;
 		    if (id->state_ == IdentClient::STATE_WAITIN)
 			unschedule_read(fd);
