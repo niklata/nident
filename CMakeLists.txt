@@ -9,6 +9,8 @@ include_directories("${PROJECT_SOURCE_DIR}/ncmlib")
 add_subdirectory(ncmlib)
 
 set(NIDENT_SRCS
+  identclient.cpp
+  epoll.cpp
   nident.cpp
   )
 
