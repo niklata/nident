@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-11-03 11:40:00 nk>
+ * Time-stamp: <2010-11-03 12:20:59 nk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -135,8 +135,8 @@ public:
     std::string outbuf_;
     IdentClientState state_;
 
-    int server_port_;
-    int client_port_;
+    int server_port_; // Port on the local machine this server is running on.
+    int client_port_; // Port on the remote machine making the ident request.
 
     bool process_input();
     bool parse_request();
@@ -201,13 +201,13 @@ bool IdentClient::parse_request()
 			found_ws_after_num = true;
 		    continue;
 		case ',': {
-		    std::string cport = inbuf_.substr(prev_idx, i);
-		    client_port_ = atoi(cport.c_str());
+		    std::string sport = inbuf_.substr(prev_idx, i);
+		    server_port_ = atoi(sport.c_str());
 		    state = ParseClientPort;
 		    prev_idx = i + 1;
 		    found_num = false;
 		    found_ws_after_num = false;
-		    log_line("cport: %d", client_port_);
+		    log_line("sport: %d", server_port_);
 		    continue;
 		}
 		case '0': case '1': case '2': case '3': case '4':
@@ -239,10 +239,10 @@ bool IdentClient::parse_request()
 		    continue;
 		case '\r':
 		case '\n': {
-		    std::string sport = inbuf_.substr(prev_idx, i);
-		    server_port_ = atoi(sport.c_str());
+		    std::string cport = inbuf_.substr(prev_idx, i);
+		    client_port_ = atoi(cport.c_str());
 		    state = ParseDone;
-		    log_line("sport: %d", server_port_);
+		    log_line("cport: %d", client_port_);
 		    return true;
 		}
 		case '0': case '1': case '2': case '3': case '4':
@@ -268,11 +268,11 @@ bool IdentClient::parse_request()
     log_line("state: %d", state);
     if (state == ParseClientPort && found_num) {
 	log_line("... prev_idx: %d, i: %d", prev_idx, i);
-	std::string sport = inbuf_.substr(prev_idx, i);
-	log_line("sport string: %s", sport.c_str());
-	server_port_ = atoi(sport.c_str());
+	std::string cport = inbuf_.substr(prev_idx, i);
+	log_line("cport string: %s", cport.c_str());
+	client_port_ = atoi(cport.c_str());
 	state = ParseDone;
-	log_line("sport: %d", server_port_);
+	log_line("cport: %d", client_port_);
 	return true;
     }
     return false;
