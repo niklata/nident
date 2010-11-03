@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-11-03 11:32:35 nk>
+ * Time-stamp: <2010-11-03 11:40:00 nk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -206,12 +206,16 @@ bool IdentClient::parse_request()
 		    state = ParseClientPort;
 		    prev_idx = i + 1;
 		    found_num = false;
+		    found_ws_after_num = false;
 		    log_line("cport: %d", client_port_);
 		    continue;
 		}
 		case '0': case '1': case '2': case '3': case '4':
 		case '5': case '6': case '7': case '8': case '9':
-		    found_num = true;
+		    if (found_num == false) {
+			found_num = true;
+			prev_idx = i;
+		    }
 		    if (found_ws_after_num) {
 			state = ParseInvalid;
 			log_line("!");
@@ -243,7 +247,10 @@ bool IdentClient::parse_request()
 		}
 		case '0': case '1': case '2': case '3': case '4':
 		case '5': case '6': case '7': case '8': case '9':
-		    found_num = true;
+		    if (found_num == false) {
+			found_num = true;
+			prev_idx = i;
+		    }
 		    if (found_ws_after_num) {
 			state = ParseInvalid;
 			log_line("!");
@@ -259,16 +266,14 @@ bool IdentClient::parse_request()
 	}
     }
     log_line("state: %d", state);
-    if (state == ParseClientPort) {
+    if (state == ParseClientPort && found_num) {
 	log_line("... prev_idx: %d, i: %d", prev_idx, i);
 	std::string sport = inbuf_.substr(prev_idx, i);
 	log_line("sport string: %s", sport.c_str());
 	server_port_ = atoi(sport.c_str());
-	if (server_port_ != 0) {
-	    state = ParseDone;
-	    log_line("sport: %d", server_port_);
-	    return true;
-	}
+	state = ParseDone;
+	log_line("sport: %d", server_port_);
+	return true;
     }
     return false;
 }
