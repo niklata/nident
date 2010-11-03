@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-11-03 12:20:59 nk>
+ * Time-stamp: <2010-11-03 12:37:59 nk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -30,6 +30,7 @@
 #define NIDENT_VERSION "1.0"
 
 #include <string>
+#include <sstream>
 #include <map>
 
 #include <unistd.h>
@@ -119,6 +120,8 @@ public:
 	state_ = STATE_WAITIN;
 	server_port_ = 0;
 	client_port_ = 0;
+	response_ = "ERROR";
+	add_info_ = "NO-USER";
     }
     ~IdentClient() {
 	close(fd_);
@@ -137,6 +140,8 @@ public:
 
     int server_port_; // Port on the local machine this server is running on.
     int client_port_; // Port on the remote machine making the ident request.
+    std::string response_;
+    std::string add_info_;
 
     bool process_input();
     bool parse_request();
@@ -192,7 +197,6 @@ bool IdentClient::parse_request()
     for (i = 0; i < inbuf_.size(); ++i) {
 	const char c = inbuf_.at(i);
 	if (state == ParseServerPort) {
-	    log_line("c is '%c'", c);
 	    switch (c) {
 		case ' ':
 		case '\t':
@@ -229,7 +233,6 @@ bool IdentClient::parse_request()
 		    return false;
 	    }
 	} else if (state == ParseClientPort) {
-	    log_line("c is '%c'", c);
 	    switch (c) {
 		case ' ':
 		case '\t':
@@ -238,13 +241,8 @@ bool IdentClient::parse_request()
 			found_ws_after_num = true;
 		    continue;
 		case '\r':
-		case '\n': {
-		    std::string cport = inbuf_.substr(prev_idx, i);
-		    client_port_ = atoi(cport.c_str());
-		    state = ParseDone;
-		    log_line("cport: %d", client_port_);
-		    return true;
-		}
+		case '\n':
+		    goto eol;
 		case '0': case '1': case '2': case '3': case '4':
 		case '5': case '6': case '7': case '8': case '9':
 		    if (found_num == false) {
@@ -265,14 +263,12 @@ bool IdentClient::parse_request()
 	    }
 	}
     }
-    log_line("state: %d", state);
+  eol:
     if (state == ParseClientPort && found_num) {
 	log_line("... prev_idx: %d, i: %d", prev_idx, i);
 	std::string cport = inbuf_.substr(prev_idx, i);
-	log_line("cport string: %s", cport.c_str());
 	client_port_ = atoi(cport.c_str());
 	state = ParseDone;
-	log_line("cport: %d", client_port_);
 	return true;
     }
     return false;
@@ -287,8 +283,13 @@ bool IdentClient::create_reply()
 	return false;
     }
     log_line("serverport: %i\t clientport: %i", server_port_, client_port_);
+
     // XXX: do real work for a real response
-    outbuf_ = "0,0:ERROR:NO-USER\r\n";
+    std::stringstream ss;
+    ss << server_port_ << "," << client_port_ << ":"
+       << response_ << ":" << add_info_ << "\r\n";
+    outbuf_ = ss.str();
+    log_line("reply: %s", ss.str().c_str());
     state_ = STATE_WAITOUT;
     unschedule_read(fd_);
     schedule_write(fd_);
