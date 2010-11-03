@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-11-03 04:49:31 njk>
+ * Time-stamp: <2010-11-03 09:01:52 nk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -29,6 +29,10 @@
 
 #define NIDENT_VERSION "1.0"
 
+#include <string>
+#include <map>
+#include <set>
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,6 +44,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/epoll.h>
 #include <fcntl.h>
 #include <ctype.h>
 
@@ -48,10 +53,9 @@
 
 #include <signal.h>
 #include <errno.h>
-
-#define _GNU_SOURCE
 #include <getopt.h>
 
+extern "C" {
 #include "defines.h"
 #include "malloc.h"
 #include "log.h"
@@ -62,8 +66,9 @@
 #include "exec.h"
 #include "network.h"
 #include "strlist.h"
+}
 
-static char *cmd = NULL, *args = NULL;
+static unsigned int max_client_bytes = 128;
 
 static volatile sig_atomic_t pending_exit, pending_reap;
 
@@ -106,24 +111,154 @@ static void handle_signals(void)
 	exit(EXIT_SUCCESS);
 }
 
+static void unschedule_read(int fd);
+static void schedule_write(int fd);
+
+class IdentClient {
+public:
+    IdentClient(int fd) : fd_(fd) { state_ = STATE_WAITIN; }
+    enum IdentClientState {
+	STATE_WAITIN,
+	STATE_GOTIN,
+	STATE_WAITOUT,
+	STATE_DONE
+    };
+    const int fd_;
+    std::string inbuf_;
+    std::string outbuf_;
+    IdentClientState state_;
+
+    bool process_input();
+    bool create_reply();
+    bool process_output();
+};
+
+// Returns false if the object needs to be destroyed by the caller.
+// State can change: STATE_WAITIN -> STATE_GOTIN
+bool IdentClient::process_input()
+{
+    if (state_ != STATE_WAITIN)
+	return false;
+    char buf[max_client_bytes];
+    memset(buf, 0, sizeof buf);
+    ssize_t len = read(fd_, buf, sizeof buf);
+    if (len == -1) {
+	log_line("fd %i: read() error %d", fd_, strerror(errno));
+	return false;
+    }
+    for (int i = 0; i < len; ++i) {
+	if (buf[i] == '\n' || buf[i] == '\r') {
+	    state_ = STATE_GOTIN;
+	    break;
+	}
+	if (inbuf_.size() + 1 > max_client_bytes) {
+	    log_line("fd %i: flood from peer (more than %i bytes), closing",
+		     fd_, max_client_bytes);
+	    return false;
+	}
+	inbuf_ += buf[i];
+    }
+    if (state_ == STATE_GOTIN)
+	create_reply();
+    return true;
+}
+
+// Forms a reply and schedules a write.
+// State can change: STATE_GOTIN -> STATE_WAITOUT
+bool IdentClient::create_reply()
+{
+    outbuf_.clear();
+    // XXX: do real work for a real response
+    outbuf_ = "0,0:ERROR:NO-USER\r\n";
+    state_ = STATE_WAITOUT;
+    unschedule_read(fd_);
+    schedule_write(fd_);
+    return true;
+}
+
+// Returns false if the object needs to be destroyed by the caller.
+// State can change: STATE_WAITOUT -> STATE_DONE
+bool IdentClient::process_output()
+{
+  repeat:
+    int written = write(fd_, outbuf_.c_str(), outbuf_.size());
+    if (written == -1) {
+	if (errno == EAGAIN)
+	    goto repeat;
+	log_line("fd %i: write() error %s", strerror(errno));
+	return false;
+    }
+    outbuf_.erase(0, written);
+    if (outbuf_.size() == 0) {
+	state_ = STATE_DONE;
+	return false;
+    }
+    return true;
+}
+
+static std::map<int, IdentClient *> clientmap;
+static std::set<int> listenfds;
+
+static int epollfd;
+static struct epoll_event *events;
+static int max_ev_events = 4;
+
+static void schedule_read(int fd)
+{
+    struct epoll_event ev;
+    ev.events = EPOLLIN;
+    ev.data.fd = fd;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1)
+	suicide("epoll_ctl failed");
+}
+
+static void unschedule_read(int fd)
+{
+    struct epoll_event ev;
+    ev.events = EPOLLIN;
+    ev.data.fd = fd;
+    if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev) == -1)
+	suicide("epoll_ctl failed");
+}
+
+static void schedule_write(int fd)
+{
+    struct epoll_event ev;
+    ev.events = EPOLLOUT;
+    ev.data.fd = fd;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1)
+	suicide("epoll_ctl failed");
+}
+
+static void unschedule_write(int fd)
+{
+    struct epoll_event ev;
+    ev.events = EPOLLOUT;
+    ev.data.fd = fd;
+    if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev) == -1)
+	suicide("epoll_ctl failed");
+}
+
 /* Abstracts away the details of accept()ing a socket connection. */
 static void accept_conns(int lsock)
 {
-    int fd;
     struct sockaddr_in sock_addr;
     socklen_t sock_len = sizeof sock_addr;
 
     for(;;)
     {
-	fd = accept(lsock, (struct sockaddr *) &sock_addr, &sock_len);
+	log_line("accept(lsock = %i)", lsock);
+	int fd = accept(lsock, (struct sockaddr *) &sock_addr, &sock_len);
 
 	if (fd != -1) {
-	    // answer request
+	    IdentClient *cid = new IdentClient(fd);
+	    clientmap[fd] = cid;
+	    schedule_read(fd);
+	    return;
 	}
 
 	switch (errno) {
 	    case EAGAIN:
-#ifdef LINUX
 	    case ENETDOWN:
 	    case EPROTO:
 	    case ENOPROTOOPT:
@@ -132,7 +267,6 @@ static void accept_conns(int lsock)
 	    case EHOSTUNREACH:
 	    case EOPNOTSUPP:
 	    case ENETUNREACH:
-#endif
 		return;
 
 	    case EINTR:
@@ -145,6 +279,7 @@ static void accept_conns(int lsock)
 	    case EMFILE:
 	    case ENFILE:
 		log_line("warning: accept returned %s!", strerror(errno));
+		sleep(1);
 		return;
 
 	    default:
@@ -155,26 +290,23 @@ static void accept_conns(int lsock)
     }
 }
 
-#ifdef LINUX
-#include <sys/epoll.h>
-static int epollfd;
-static struct epoll_event ev, *events;
-static int max_ev_events = 4;
-
 static void epoll_init(int *sockets)
 {
+    struct epoll_event ev;
     epollfd = epoll_create1(0);
     if (epollfd == -1)
         suicide("epoll_create1 failed");
-    events = xmalloc(max_ev_events * sizeof (struct epoll_event));
+    events = new struct epoll_event[max_ev_events];
 
     for (int i = 1; i < sockets[0]; ++i) {
 	if (sockets[i] < 0)
 	    continue;
 	ev.events = EPOLLIN;
 	ev.data.fd = sockets[i];
+	listenfds.insert(ev.data.fd);
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, sockets[i], &ev) == -1)
 	    suicide("epoll_ctl failed");
+	log_line("added lsock = %i", sockets[i]);
     }
     free(sockets);
 }
@@ -193,62 +325,79 @@ static void epoll_dispatch_work(void)
 	}
 	if (pending_exit == 1)
 	    return;
-	for (int i = 0; i < ret; ++i)
-	    accept_conns(events[i].data.fd);
+	for (int i = 0; i < ret; ++i) {
+	    int fd = events[i].data.fd;
+	    log_line("events[%i].data.fd = %i", i, fd);
+	    if (listenfds.find(fd) != listenfds.end()) {
+		if (events[i].events & EPOLLIN)
+		    accept_conns(fd);
+		else if (events[i].events & EPOLLHUP)
+		    suicide("listen fd got a HUP");
+	    } else {
+		std::map<int, IdentClient *>::iterator iter = clientmap.find(fd);
+		if (events[i].events & EPOLLIN) {
+		    if (iter == clientmap.end()) {
+			log_line("fd %i: EPOLLIN: no IdentClient associated", fd);
+			unschedule_read(fd);
+			close(fd);
+			continue;
+		    }
+		    IdentClient *id = iter->second;
+		    if (!id->process_input()) {
+			unschedule_read(fd);
+			clientmap.erase(iter);
+			close(fd);
+			continue;
+		    }
+		}
+		else if (events[i].events & EPOLLOUT) {
+		    if (iter == clientmap.end()) {
+			log_line("fd %i: EPOLLOUT: no IdentClient associated", fd);
+			unschedule_write(fd);
+			close(fd);
+			continue;
+		    }
+		    IdentClient *id = iter->second;
+		    if (!id->process_output()) {
+			unschedule_write(fd);
+			clientmap.erase(iter);
+			close(fd);
+			continue;
+		    }
+		} else if (events[i].events & EPOLLHUP) {
+		    if (iter == clientmap.end()) {
+			log_line("fd %i: EPOLLHUP: no IdentClient associated", fd);
+			unschedule_read(fd);
+			unschedule_write(fd);
+			close(fd);
+			continue;
+		    }
+		    IdentClient *id = iter->second;
+		    if (id->state_ == IdentClient::STATE_WAITIN)
+			unschedule_read(fd);
+		    else if (id->state_ == IdentClient::STATE_WAITOUT)
+			unschedule_write(fd);
+		    clientmap.erase(iter);
+		    close(fd);
+		    continue;
+		}
+	    }
+	}
     }
 }
-#else /* LINUX */
-static void select_dispatch_work(int *sockets)
-{
-    fd_set rfds;
-    int maxfdn = -1;
-    for (int i = 1; i < sockets[0]; ++i) {
-	if (sockets[i] > maxfdn)
-	    maxfdn = sockets[i];
-    }
-
-    for (;;) {
-	handle_signals();
-
-	FD_ZERO(&rfds);
-	for (int i = 1; i < sockets[0]; ++i) {
-	    if (sockets[i] < 0)
-		continue;
-	    FD_SET(sockets[i], &rfds);
-	}
-
-	if (select(maxfdn + 1, &rfds, NULL, NULL, NULL) == -1) {
-	    if (errno == EINTR)
-		continue;
-	    if (pending_exit == 1)
-		return;
-	    suicide("select returned an error");
-	}
-
-        /* handle pending connections */
-	for (int i = 1; i < sockets[0]; ++i) {
-	    if (sockets[i] < 0)
-		continue;
-	    if (FD_ISSET(sockets[i], &rfds))
-		accept_conns(sockets[i]);
-	}
-    }
-}
-#endif /* LINUX */
 
 int main(int argc, char** argv) {
-    int c, t, uid = 0, gid = 0, i, len;
+    int c, t, uid = 0, gid = 0, len;
     unsigned int port = 0;
     int backlog = 30;
-    char *pidfile = NULL;
-    char *chrootd = NULL;
+    std::string pidfile, chrootd;
     char *p;
     struct passwd *pws;
     struct group *grp;
     strlist_t *addrlist = NULL;
     int *sockets = NULL;
 
-    gflags_log_name = "nident";
+    gflags_log_name = const_cast<char *>("nident");
 
     while (1) {
 	int option_index = 0;
@@ -260,6 +409,7 @@ int main(int argc, char** argv) {
 	    {"chroot", 1, 0, 'c'},
 	    {"max-events", 1, 0, 'e'},
 	    {"backlog", 1, 0, 'b'},
+	    {"max-bytes", 1, 0, 'B'},
 	    {"address", 1, 0, 'a'},
 	    {"port", 1, 0, 'p'},
 	    {"user", 1, 0, 'u'},
@@ -269,11 +419,7 @@ int main(int argc, char** argv) {
 	    {0, 0, 0, 0}
 	};
 
-	c = getopt_long(argc, argv, "dnf:qc:"
-#ifdef LINUX
-			"e:"
-#endif
-		        "b:a:p:ou:g:hv",
+	c = getopt_long(argc, argv, "dnf:qc:e:b:B:a:p:ou:g:hv",
 			long_options, &option_index);
 	if (c == -1)
 	    break;
@@ -288,13 +434,11 @@ int main(int argc, char** argv) {
 		    "  -d, --detach                detach from TTY and daemonize (default)\n"
 		    "  -n, --nodetach              stay attached to TTY\n"
 		    "  -q, --quiet                 don't print to std(out|err) or log\n"
-		    "  -c, --config-dir                configuration directory\n");
-#ifdef LINUX
-		printf(
+		    "  -c, --config-dir                configuration directory\n"
 		    "  -e, --max-events            max events processed per epoll_wait\n");
-#endif
 		printf(
 		    "  -b, --backlog               maximum simultaneous connections accepted\n"
+		    "  -B, --max-bytes             maximum number of bytes allowed from a client\n"
 		    "  -a, --address               address on which to listen (default all local)\n"
 		    "  -p, --port                  port on which to listen (only one allowed)\n"
 		    "  -f, --pidfile               pidfile path\n");
@@ -348,22 +492,26 @@ int main(int argc, char** argv) {
 		backlog = atoi(optarg);
 		break;
 
+	    case 'B':
+		max_client_bytes = atoi(optarg);
+		if (max_client_bytes < 64)
+		    max_client_bytes = 64;
+		else if (max_client_bytes > 1024)
+		    max_client_bytes = 1024;
+		break;
+
 	    case 'p':
 		port = atoi(optarg);
 		break;
 
 	    case 'c':
-		len = strlen(optarg) + 1;
-		free(chrootd);
-		chrootd = xmalloc(len);
-		strlcpy(chrootd, optarg, len);
+		len = strlen(optarg);
+		chrootd = std::string(optarg, len);
 		break;
 
 	    case 'f':
-		len = strlen(optarg) + 1;
-		free(pidfile);
-		pidfile = xmalloc(len);
-		strlcpy(pidfile, optarg, len);
+		len = strlen(optarg);
+		pidfile = std::string(optarg, len);
 		break;
 
 	    case 'a':
@@ -393,51 +541,32 @@ int main(int argc, char** argv) {
 		} else
 		    gid = t;
 		break;
-#ifdef LINUX
+
 	    case 'e':
 		max_ev_events = atoi(optarg);
 		break;
-#endif
 	}
     }
 
-    if (argv[optind] != NULL) {
-	len = strlen(argv[optind]) + 1;
-	cmd = xmalloc(len);
-	strlcpy(cmd, argv[optind], len);
-
-	for (len = 0, i = optind + 1; argv[i] != NULL; ++i)
-	    len += strlen(argv[i]) + 1; /* +1 accounts for space AND '\0' */
-	if (len) {
-	    args = xmalloc(len);
-	    i = optind + 1;
-	    strlcpy(args, argv[i++], len);
-	    while (argv[i] != NULL) {
-		strlcat(args, " ", len);
-		strlcat(args, argv[i++], len);
-	    }
-	}
-    }
     if (gflags_detach)
 	if (daemon(0,0))
 	    suicide("detaching fork failed");
 
-    if (!cmd)
-	suicide("no server daemon to run!");
-
     if (!port)
 	suicide("no listening port specified!");
 
-    if (pidfile && file_exists(pidfile, "w"))
-	write_pid(pidfile);
+    if (pidfile.size() && file_exists(pidfile.c_str(), "w"))
+	write_pid(pidfile.c_str());
 
     umask(077);
     fix_signals();
     ncm_fix_env(uid, 0);
+
     if (!addrlist)
 	sockets = tcp_server_socket("::", port, backlog);
     else {
-	for (strlist_t *iter = addrlist; iter; iter = iter->next) {
+	for (strlist_t *iter = addrlist; iter;
+	     iter = static_cast<strlist_t *>(iter->next)) {
 	    int *t;
 	    t = tcp_server_socket(iter->str, port, backlog);
 	    if (!sockets) {
@@ -445,7 +574,7 @@ int main(int argc, char** argv) {
 		continue;
 	    }
 	    int newsize = sockets[0] + t[0] - 1;
-	    sockets = xrealloc(sockets, newsize);
+	    sockets = static_cast<int *>(xrealloc(sockets, newsize));
 	    for (int i = sockets[0], j = 1; i < newsize; ++i, ++j)
 		sockets[i] = t[j];
 	    sockets[0] = newsize;
@@ -456,25 +585,17 @@ int main(int argc, char** argv) {
     if (sockets == NULL)
 	suicide("unable to create any listen sockets");
 
-    imprison(chrootd);
-    drop_root(uid, gid, NULL);
+    //imprison(chrootd.c_str());
+
+    if (uid != 0 || gid != 0)
+	drop_root(uid, gid);
 
     /* Cover our tracks... */
-    free(chrootd);
-    free(pidfile);
-    chrootd = NULL;
-    pidfile = NULL;
+    chrootd.clear();
+    pidfile.clear();
 
-    close(0);
-    close(1);
-
-#ifdef LINUX
     epoll_init(sockets);
     epoll_dispatch_work();
-#else
-    select_dispatch_work(sockets);
-    free(sockets);
-#endif
 
     exit(EXIT_SUCCESS);
 }
