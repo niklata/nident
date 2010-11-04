@@ -68,7 +68,9 @@ void ProcParse::parse_tcp(std::string fn)
             cs >> c;
             ds << std::hex << m[1];
             ds >> d;
-            std::cout << "local: " << a << "." << b << "." << c << "." << d << "\n";
+            std::cout << "locl4: " << a << "." << b << "." << c << "." << d << "\n";
+            std::cout << "locl6: " << "0000:0000:0000:0000:0000:ffff:"
+                      << m[4] << m[3] << ":" << m[2] << m[1] << "\n";
             ls << std::hex << m[6] << m[5];
             ls >> lp;
             std::cout << "lport: " << lp << "\n";
@@ -80,7 +82,9 @@ void ProcParse::parse_tcp(std::string fn)
             gs >> g;
             hs << std::hex << m[7];
             hs >> h;
-            std::cout << "rmote: " << e << "." << f << "." << g << "." << h << "\n";
+            std::cout << "rmot4: " << e << "." << f << "." << g << "." << h << "\n";
+            std::cout << "rmot6: " << "0000:0000:0000:0000:0000:ffff:"
+                      << m[10] << m[9] << ":" << m[8] << m[7] << "\n";
             rs << std::hex << m[12] << m[11];
             rs >> rp;
             std::cout << "rport: " << rp << "\n";
@@ -164,14 +168,14 @@ void ProcParse::parse_tcp6(std::string fn)
         if (boost::regex_match(l.c_str(), m, re)) {
             std::stringstream ls, rs;
             unsigned int lp, rp;
-            std::cout << "local: "<< m[4] << m[3] << ":" << m[2] << m[1] << ":"
+            std::cout << "local: " << m[4] << m[3] << ":" << m[2] << m[1] << ":"
                       << m[8] << m[7] << ":" << m[6] << m[5] << ":"
                       << m[12] << m[11] << ":" << m[10] << m[9] << ":"
                       << m[16] << m[15] << ":" << m[14] << m[13] << "\n";
             ls << std::hex << m[18] << m[17];
             ls >> lp;
             std::cout << "lport: " << lp << "\n";
-            std::cout << "rmote: "<< m[22] << m[21] << ":" << m[20] << m[19] << ":"
+            std::cout << "rmote: " << m[22] << m[21] << ":" << m[20] << m[19] << ":"
                       << m[26] << m[25] << ":" << m[24] << m[23] << ":"
                       << m[30] << m[29] << ":" << m[28] << m[27] << ":"
                       << m[34] << m[33] << ":" << m[32] << m[31] << "\n";
