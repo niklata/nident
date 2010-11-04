@@ -1,5 +1,5 @@
 /* epoll.cpp - ident server event handling
- * Time-stamp: <2010-11-03 13:09:52 nk>
+ * Time-stamp: <2010-11-03 23:40:12 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -176,15 +176,16 @@ void epoll_dispatch_work(void)
             return;
         for (int i = 0; i < ret; ++i) {
             int fd = events[i].data.fd;
-            log_line("events[%i].data.fd = %i", i, fd);
             std::map<int, IdentClient *>::iterator iter = clientmap.find(fd);
             if (iter == clientmap.end()) {
+                log_line("listen fd (%d) EPOLLIN", fd);
                 if (events[i].events & EPOLLIN)
                     accept_conns(fd);
                 else if (events[i].events & EPOLLHUP)
                     suicide("listen fd got a HUP");
             } else {
                 if (events[i].events & EPOLLIN) {
+                    log_line("client fd (%d) EPOLLIN", fd);
                     IdentClient *id = iter->second;
                     if (!id->process_input()) {
                         unschedule_read(fd);
@@ -194,6 +195,7 @@ void epoll_dispatch_work(void)
                     }
                 }
                 else if (events[i].events & EPOLLOUT) {
+                    log_line("client fd (%d) EPOLLOUT", fd);
                     IdentClient *id = iter->second;
                     if (!id->process_output()) {
                         unschedule_write(fd);
@@ -202,6 +204,7 @@ void epoll_dispatch_work(void)
                         continue;
                     }
                 } else if (events[i].events & EPOLLHUP) {
+                    log_line("client fd (%d) EPOLLHUP", fd);
                     IdentClient *id = iter->second;
                     if (id->state_ == IdentClient::STATE_WAITIN)
                         unschedule_read(fd);
@@ -212,6 +215,7 @@ void epoll_dispatch_work(void)
                     continue;
                 }
             }
+            log_line("did nothing: events[%i].data.fd = %i", i, fd);
         }
     }
 }

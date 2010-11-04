@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-03 13:10:21 nk>
+ * Time-stamp: <2010-11-04 00:06:49 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -55,7 +55,6 @@ IdentClient::~IdentClient() {
     log_line("fd %d: destructor called", fd_);
 }
 
-
 // Returns false if the object needs to be destroyed by the caller.
 // State can change: STATE_WAITIN -> STATE_GOTIN
 bool IdentClient::process_input()
@@ -64,10 +63,16 @@ bool IdentClient::process_input()
         return false;
     char buf[max_client_bytes];
     memset(buf, 0, sizeof buf);
-    ssize_t len = read(fd_, buf, sizeof buf);
-    if (len == -1) {
-        log_line("fd %i: read() error %d", fd_, strerror(errno));
-        return false;
+    ssize_t len = 0;
+    while (len < max_client_bytes) {
+        ssize_t r = read(fd_, buf, sizeof buf);
+        if (r == -1) {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+                continue;
+            log_line("fd %i: read() error %d", fd_, strerror(errno));
+            return false;
+        }
+        len += r;
     }
     for (int i = 0; i < len; ++i) {
         if (buf[i] == '\n' || buf[i] == '\r') {
@@ -82,6 +87,7 @@ bool IdentClient::process_input()
         inbuf_ += buf[i];
     }
     if (state_ == STATE_GOTIN) {
+        unschedule_read(fd_);
         if (!create_reply())
             return false;
     }
@@ -198,7 +204,6 @@ bool IdentClient::create_reply()
     outbuf_ = ss.str();
     log_line("reply: %s", ss.str().c_str());
     state_ = STATE_WAITOUT;
-    unschedule_read(fd_);
     schedule_write(fd_);
     return true;
 }
