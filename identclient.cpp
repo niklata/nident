@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-04 00:20:54 nk>
+ * Time-stamp: <2010-11-04 05:06:06 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -35,6 +35,7 @@
 
 #include "epoll.hpp"
 #include "identclient.hpp"
+#include "procparse.hpp"
 
 extern "C" {
 #include "log.h"
@@ -59,18 +60,24 @@ IdentClient::~IdentClient() {
 // State can change: STATE_WAITIN -> STATE_GOTIN
 bool IdentClient::process_input()
 {
-    if (state_ != STATE_WAITIN)
+    if (state_ != STATE_WAITIN) {
+        log_line("process_input: state is not STATE_WAITIN");
         return false;
+    }
     char buf[max_client_bytes];
     memset(buf, 0, sizeof buf);
     ssize_t len = 0;
     while (len < max_client_bytes) {
-        ssize_t r = read(fd_, buf, sizeof buf);
+        log_line("read(%d, %d, %d)", fd_, buf+len, (sizeof buf) - len);
+        ssize_t r = read(fd_, buf + len, (sizeof buf) - len);
+        log_line("r = %d", r);
         if (r == 0)
             break;
         if (r == -1) {
-            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+            if (errno == EINTR)
                 continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                break;
             log_line("fd %i: read() error %d", fd_, strerror(errno));
             return false;
         }
@@ -82,7 +89,9 @@ bool IdentClient::process_input()
         return false;
 
     for (int i = 0; i < len; ++i) {
+        log_line("buf[%d] = %d", i, buf[i]);
         if (buf[i] == '\n' || buf[i] == '\r') {
+            inbuf_ += buf[i];
             state_ = STATE_GOTIN;
             break;
         }
@@ -205,6 +214,9 @@ bool IdentClient::create_reply()
     log_line("serverport: %i\t clientport: %i", server_port_, client_port_);
 
     // XXX: do real work for a real response
+    ProcParse pp;
+    pp.parse_tcp("/proc/net/tcp");
+
     std::stringstream ss;
     ss << server_port_ << "," << client_port_ << ":"
        << response_ << ":" << add_info_ << "\r\n";
@@ -219,15 +231,20 @@ bool IdentClient::create_reply()
 // State can change: STATE_WAITOUT -> STATE_DONE
 bool IdentClient::process_output()
 {
-  repeat:
-    int written = write(fd_, outbuf_.c_str(), outbuf_.size());
-    if (written == -1) {
-        if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
-            goto repeat;
-        log_line("fd %i: write() error %s", strerror(errno));
-        return false;
+    while (outbuf_.size()) {
+        int written = write(fd_, outbuf_.c_str(), outbuf_.size());
+        if (written == 0)
+            break;
+        if (written == -1) {
+            if (errno == EINTR)
+                continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                break;
+            log_line("fd %i: write() error %s", strerror(errno));
+            return false;
+        }
+        outbuf_.erase(0, written);
     }
-    outbuf_.erase(0, written);
     if (outbuf_.size() == 0) {
         state_ = STATE_DONE;
         return false;

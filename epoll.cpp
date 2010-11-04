@@ -1,5 +1,5 @@
 /* epoll.cpp - ident server event handling
- * Time-stamp: <2010-11-04 00:20:49 nk>
+ * Time-stamp: <2010-11-04 05:02:16 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -40,6 +40,7 @@
 #include "epoll.hpp"
 
 extern "C" {
+#include "network.h"
 #include "log.h"
 }
 
@@ -103,6 +104,7 @@ static void accept_conns(int lsock)
         if (fd != -1) {
             IdentClient *cid = new IdentClient(fd);
             clientmap[fd] = cid;
+            tcp_set_sock_nonblock(fd);
             schedule_read(fd);
             return;
         }
