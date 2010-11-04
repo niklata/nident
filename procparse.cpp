@@ -58,8 +58,11 @@ void ProcParse::parse_tcp(std::string fn)
         }
 
         if (boost::regex_match(l.c_str(), m, re)) {
-            std::stringstream as, bs, cs, ds, es, fs, gs, hs, ls, rs;
-            unsigned int a, b, c, d, e, f, g, h, lp, rp;
+            ProcTcpItem ti;
+            std::stringstream as, bs, cs, ds, es, fs, gs, hs, ls, rs, us;
+            std::stringstream la6, ra6;
+            unsigned int a, b, c, d, e, f, g, h;
+
             as << std::hex << m[4];
             as >> a;
             bs << std::hex << m[3];
@@ -68,12 +71,11 @@ void ProcParse::parse_tcp(std::string fn)
             cs >> c;
             ds << std::hex << m[1];
             ds >> d;
-            std::cout << "locl4: " << a << "." << b << "." << c << "." << d << "\n";
-            std::cout << "locl6: " << "0000:0000:0000:0000:0000:ffff:"
-                      << m[4] << m[3] << ":" << m[2] << m[1] << "\n";
+            la6 << "0000:0000:0000:0000:0000:ffff:"
+                << m[4] << m[3] << ":" << m[2] << m[1];
+            ti.local_address_ = la6.str();
             ls << std::hex << m[6] << m[5];
-            ls >> lp;
-            std::cout << "lport: " << lp << "\n";
+            ls >> ti.local_port_;
             es << std::hex << m[10];
             es >> e;
             fs << std::hex << m[9];
@@ -82,12 +84,21 @@ void ProcParse::parse_tcp(std::string fn)
             gs >> g;
             hs << std::hex << m[7];
             hs >> h;
-            std::cout << "rmot4: " << e << "." << f << "." << g << "." << h << "\n";
-            std::cout << "rmot6: " << "0000:0000:0000:0000:0000:ffff:"
-                      << m[10] << m[9] << ":" << m[8] << m[7] << "\n";
+            ra6 << "0000:0000:0000:0000:0000:ffff:"
+                << m[10] << m[9] << ":" << m[8] << m[7];
+            ti.remote_address_ = ra6.str();
             rs << std::hex << m[12] << m[11];
-            rs >> rp;
-            std::cout << "rport: " << rp << "\n";
+            rs >> ti.remote_port_;
+            us << m[13];
+            us >> ti.uid;
+            items.push_back(ti);
+
+            std::cout << "locl4: " << a << "." << b << "." << c << "." << d << "\n";
+            std::cout << "locl6: " << ti.local_address_ << "\n";
+            std::cout << "lport: " << ti.local_port_ << "\n";
+            std::cout << "rmot4: " << e << "." << f << "." << g << "." << h << "\n";
+            std::cout << "rmot6: " << ti.remote_address_ << "\n";
+            std::cout << "rport: " << ti.remote_port_ << "\n";
             std::cout << "uid: " << m[13] << "\n";
         }
     }
@@ -166,23 +177,31 @@ void ProcParse::parse_tcp6(std::string fn)
         }
 
         if (boost::regex_match(l.c_str(), m, re)) {
-            std::stringstream ls, rs;
-            unsigned int lp, rp;
-            std::cout << "local: " << m[4] << m[3] << ":" << m[2] << m[1] << ":"
-                      << m[8] << m[7] << ":" << m[6] << m[5] << ":"
-                      << m[12] << m[11] << ":" << m[10] << m[9] << ":"
-                      << m[16] << m[15] << ":" << m[14] << m[13] << "\n";
+            ProcTcpItem ti;
+            std::stringstream la6, ra6, ls, rs, us;
+
+            la6 << m[4] << m[3] << ":" << m[2] << m[1] << ":"
+                << m[8] << m[7] << ":" << m[6] << m[5] << ":"
+                << m[12] << m[11] << ":" << m[10] << m[9] << ":"
+                << m[16] << m[15] << ":" << m[14] << m[13];
+            ti.local_address_ = la6.str();
             ls << std::hex << m[18] << m[17];
-            ls >> lp;
-            std::cout << "lport: " << lp << "\n";
-            std::cout << "rmote: " << m[22] << m[21] << ":" << m[20] << m[19] << ":"
-                      << m[26] << m[25] << ":" << m[24] << m[23] << ":"
-                      << m[30] << m[29] << ":" << m[28] << m[27] << ":"
-                      << m[34] << m[33] << ":" << m[32] << m[31] << "\n";
+            ls >> ti.local_port_;
+            ra6 << m[22] << m[21] << ":" << m[20] << m[19] << ":"
+                << m[26] << m[25] << ":" << m[24] << m[23] << ":"
+                << m[30] << m[29] << ":" << m[28] << m[27] << ":"
+                << m[34] << m[33] << ":" << m[32] << m[31];
+            ti.remote_address_ = ra6.str();
             rs << std::hex << m[36] << m[35];
-            rs >> rp;
-            std::cout << "rport: " << rp << "\n";
-            std::cout << "uid: " << m[37] << "\n";
+            rs >> ti.remote_port_;
+            us << m[37];
+            us >> ti.uid;
+
+            std::cout << "local: " << ti.local_address_ << "\n";
+            std::cout << "lport: " << ti.local_port_ << "\n";
+            std::cout << "rmote: " << ti.remote_address_ << "\n";
+            std::cout << "rport: " << ti.remote_port_ << "\n";
+            std::cout << "uid: " << ti.uid << "\n";
         }
     }
     f.close();
