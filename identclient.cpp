@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-04 00:06:49 nk>
+ * Time-stamp: <2010-11-04 00:11:25 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -66,6 +66,8 @@ bool IdentClient::process_input()
     ssize_t len = 0;
     while (len < max_client_bytes) {
         ssize_t r = read(fd_, buf, sizeof buf);
+        if (r == 0)
+            break;
         if (r == -1) {
             if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
                 continue;
@@ -215,7 +217,7 @@ bool IdentClient::process_output()
   repeat:
     int written = write(fd_, outbuf_.c_str(), outbuf_.size());
     if (written == -1) {
-        if (errno == EAGAIN)
+        if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
             goto repeat;
         log_line("fd %i: write() error %s", strerror(errno));
         return false;
