@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-04 00:11:25 nk>
+ * Time-stamp: <2010-11-04 00:20:54 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -76,6 +76,11 @@ bool IdentClient::process_input()
         }
         len += r;
     }
+
+    // Remote end hung up.
+    if (len == 0)
+        return false;
+
     for (int i = 0; i < len; ++i) {
         if (buf[i] == '\n' || buf[i] == '\r') {
             state_ = STATE_GOTIN;
