@@ -1,5 +1,5 @@
 /* epoll.cpp - ident server event handling
- * Time-stamp: <2010-11-03 23:40:12 nk>
+ * Time-stamp: <2010-11-04 00:13:57 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -193,8 +193,7 @@ void epoll_dispatch_work(void)
                         delete id;
                         continue;
                     }
-                }
-                else if (events[i].events & EPOLLOUT) {
+                } else if (events[i].events & EPOLLOUT) {
                     log_line("client fd (%d) EPOLLOUT", fd);
                     IdentClient *id = iter->second;
                     if (!id->process_output()) {
