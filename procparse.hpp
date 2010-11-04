@@ -16,6 +16,7 @@ public:
         int uid;
     };
     void parse_tcp(std::string fn);
+    void parse_tcp6(std::string fn);
     std::vector<ProcTcpItem> items;
 };
 

@@ -16,23 +16,23 @@ void ProcParse::parse_tcp(std::string fn)
     }
 
     // skip the header
-    std::cout << "1" << std::endl;
     std::getline(f, l);
-    std::cout << "Line: '" << l << "'\n";
-    std::cout << "2" << std::endl;
     if (f.eof()) {
         std::cerr << "no tcp connections\n";
-        goto out;
+        f.close();
+        return;
     } else if (f.bad()) {
         std::cerr << "fatal io error getting first line of proc/net/tcp\n";
-        goto out;
+        f.close();
+        return;
     } else if (f.fail()) {
         std::cerr << "non-fatal io error getting first line of proc/net/tcp\n";
-        goto out;
+        f.close();
+        return;
     }
 
-    std::cout << "3" << std::endl;
-
+    // sl local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid
+    // 0: 00000000:2383 00000000:0000 0A 00000000:00000000 00:00000000 00000000   109
     re.assign("\\s*\\d+:" // sl
               "\\s+([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2}):([0-9a-fA-F]{2})([0-9a-fA-F]{2})" // local
               "\\s+([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2}):([0-9a-fA-F]{2})([0-9a-fA-F]{2})" // remote
@@ -56,10 +56,6 @@ void ProcParse::parse_tcp(std::string fn)
             std::cerr << "non-fatal io error fetching line of proc/net/tcp\n";
             break;
         }
-
-        // sl local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid
-        // 0: 00000000:2383 00000000:0000 0A 00000000:00000000 00:00000000 00000000   109
-        std::cout << "line: '" << l << "'\n";
 
         if (boost::regex_match(l.c_str(), m, re)) {
             std::stringstream as, bs, cs, ds, es, fs, gs, hs, ls, rs;
@@ -91,8 +87,99 @@ void ProcParse::parse_tcp(std::string fn)
             std::cout << "uid: " << m[13] << "\n";
         }
     }
-    std::cout << "4" << std::endl;
+    f.close();
+}
 
-  out:
+void ProcParse::parse_tcp6(std::string fn)
+{
+    std::string l;
+    std::ifstream f(fn, std::ifstream::in);
+    boost::regex re;
+    boost::cmatch m;
+
+    if (f.fail() || f.bad() || f.eof()) {
+        std::cerr << "failed to open file: '" << fn << "'";
+        return;
+    }
+
+    // skip the header
+    std::getline(f, l);
+    if (f.eof()) {
+        std::cerr << "no tcp connections\n";
+        f.close();
+        return;
+    } else if (f.bad()) {
+        std::cerr << "fatal io error getting first line of proc/net/tcp\n";
+        f.close();
+        return;
+    } else if (f.fail()) {
+        std::cerr << "non-fatal io error getting first line of proc/net/tcp\n";
+        f.close();
+        return;
+    }
+
+    // sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+    // 12: 700401200000B4E20000000001000000:D063 28F1072601054000EFBEADDECCCCFECA:1A29 01 00000000:00000000 02:00053FAD 00000000  1000        0 4039830 2 ffff
+    re.assign("\\s*\\d+:\\s+" // sl
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              ":([0-9a-fA-F]{2})([0-9a-fA-F]{2})" // local
+              "\\s+"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
+              ":([0-9a-fA-F]{2})([0-9a-fA-F]{2})" // remote
+              "\\s+[0-9a-fA-F]{2}" // st
+              "\\s+[0-9a-fA-F]{8}:[0-9a-fA-F]{8}" // tx_queue:rx_queue
+              "\\s+[0-9a-fA-F]{2}:[0-9a-fA-F]{8}" // tr:tm->when
+              "\\s+[0-9a-fA-F]{8}" // retrnsmt
+              "\\s+(\\d+)" // uid
+              "\\s+\\d+.*" // timeout
+              , boost::regex_constants::icase);
+
+    while (1) {
+        std::getline(f, l);
+        if (f.eof()) {
+            std::cerr << "end of tcp connections\n";
+            break;
+        } else if (f.bad()) {
+            std::cerr << "fatal io error fetching line of proc/net/tcp\n";
+            break;
+        } else if (f.fail()) {
+            std::cerr << "non-fatal io error fetching line of proc/net/tcp\n";
+            break;
+        }
+
+        if (boost::regex_match(l.c_str(), m, re)) {
+            std::stringstream ls, rs;
+            unsigned int lp, rp;
+            std::cout << "local: "<< m[4] << m[3] << ":" << m[2] << m[1] << ":"
+                      << m[8] << m[7] << ":" << m[6] << m[5] << ":"
+                      << m[12] << m[11] << ":" << m[10] << m[9] << ":"
+                      << m[16] << m[15] << ":" << m[14] << m[13] << "\n";
+            ls << std::hex << m[18] << m[17];
+            ls >> lp;
+            std::cout << "lport: " << lp << "\n";
+            std::cout << "rmote: "<< m[22] << m[21] << ":" << m[20] << m[19] << ":"
+                      << m[26] << m[25] << ":" << m[24] << m[23] << ":"
+                      << m[30] << m[29] << ":" << m[28] << m[27] << ":"
+                      << m[34] << m[33] << ":" << m[32] << m[31] << "\n";
+            rs << std::hex << m[36] << m[35];
+            rs >> rp;
+            std::cout << "rport: " << rp << "\n";
+            std::cout << "uid: " << m[37] << "\n";
+        }
+    }
     f.close();
 }
