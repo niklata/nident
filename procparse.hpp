@@ -21,18 +21,27 @@ public:
         PolicySpoof,
         PolicyHash
     };
-    enum HashItem {
-        HashNone = 0,
-        HashUID = 1,
-        HashIP = 2,
-        HashSP = 4,
-        HashDP = 8
-    };
     struct Policy {
+        enum HashItem {
+            fHashNone = 0,
+            fHashUID = 1,
+            fHashIP = 2,
+            fHashSP = 4,
+            fHashDP = 8
+        };
         PolicyAction action;
         std::string spoof;
+        Policy() { action = PolicyNone; hashitems = fHashNone; }
+        void setHashUID() { hashitems |= fHashUID; }
+        void setHashIP() { hashitems |= fHashIP; }
+        void setHashSP() { hashitems |= fHashSP; }
+        void setHashDP() { hashitems |= fHashDP; }
+        bool isHashUID() const { return (hashitems & fHashUID) ? true : false; }
+        bool isHashIP() const { return (hashitems & fHashIP) ? true : false; }
+        bool isHashSP() const { return (hashitems & fHashSP) ? true : false; }
+        bool isHashDP() const { return (hashitems & fHashDP) ? true : false; }
+    private:
         int hashitems;
-        Policy() { action = PolicyNone; hashitems = 0; }
     };
     struct ConfigItem {
         HostType type;
@@ -56,9 +65,11 @@ public:
         unsigned short remote_port_;
         int uid;
     };
-    void parse_tcp(std::string fn);
-    void parse_tcp6(std::string fn);
-    void parse_cfg(std::string fn);
+    void parse_tcp(const std::string &fn);
+    void parse_tcp6(const std::string &fn);
+    void parse_cfg(const std::string &fn);
+    bool compare_ipv6(const std::string &ip, const std::string &mask,
+                      int msize);
     std::vector<ProcTcpItem> tcp_items;
     std::vector<ConfigItem> cfg_items;
 };

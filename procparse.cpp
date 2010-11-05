@@ -3,7 +3,7 @@
 #include <sstream>
 #include <boost/regex.hpp>
 
-void ProcParse::parse_tcp(std::string fn)
+void ProcParse::parse_tcp(const std::string &fn)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
@@ -104,7 +104,7 @@ void ProcParse::parse_tcp(std::string fn)
     f.close();
 }
 
-void ProcParse::parse_tcp6(std::string fn)
+void ProcParse::parse_tcp6(const std::string &fn)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
@@ -206,7 +206,7 @@ void ProcParse::parse_tcp6(std::string fn)
     f.close();
 }
 
-void ProcParse::parse_cfg(std::string fn)
+void ProcParse::parse_cfg(const std::string &fn)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
@@ -291,7 +291,14 @@ void ProcParse::parse_cfg(std::string fn)
                 ci.policy.spoof = o[1];
             } else if (boost::regex_match(polstr.c_str(), o, re_hash)) {
                 ci.policy.action = PolicyHash;
-                // XXX: match the types
+                if (boost::regex_match(polstr.c_str(), o, boost::regex(".*?uid.*?")))
+                    ci.policy.setHashUID();
+                if (boost::regex_match(polstr.c_str(), o, boost::regex(".*?ip.*?")))
+                    ci.policy.setHashIP();
+                if (boost::regex_match(polstr.c_str(), o, boost::regex(".*?sp.*?")))
+                    ci.policy.setHashSP();
+                if (boost::regex_match(polstr.c_str(), o, boost::regex(".*?dp.*?")))
+                    ci.policy.setHashDP();
             } else
                 continue; // invalid
             cfg_items.push_back(ci);
@@ -315,9 +322,18 @@ void ProcParse::parse_cfg(std::string fn)
                 std::cout << "Policy: accept\n";
             else if (ci.policy.action == PolicySpoof)
                 std::cout << "Policy: spoof [" << ci.policy.spoof << "]\n";
-            else if (ci.policy.action == PolicyHash)
-                std::cout << "Policy: hash [NYI]\n";
-            else
+            else if (ci.policy.action == PolicyHash) {
+                std::cout << "Policy: hash";
+                if (ci.policy.isHashUID())
+                    std::cout << " uid";
+                if (ci.policy.isHashIP())
+                    std::cout << " ip";
+                if (ci.policy.isHashSP())
+                    std::cout << " sp";
+                if (ci.policy.isHashDP())
+                    std::cout << " dp";
+                std::cout << "\n";
+            } else
                 continue; // invalid
         }
     }
@@ -325,3 +341,8 @@ void ProcParse::parse_cfg(std::string fn)
     f.close();
 }
 
+bool ProcParse::compare_ipv6(const std::string &ip, const std::string &mask,
+                             int msize)
+{
+    return false;
+}
