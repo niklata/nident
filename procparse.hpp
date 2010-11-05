@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include <arpa/inet.h>
+
 class ProcParse {
 public:
     enum HostType {
@@ -45,7 +47,7 @@ public:
     };
     struct ConfigItem {
         HostType type;
-        std::string host;
+        struct in6_addr host;
         int mask;
         int low_lport;
         int high_lport;
@@ -59,9 +61,9 @@ public:
         }
     };
     struct ProcTcpItem {
-        std::string local_address_; // check with getsockname
+        struct in6_addr local_address_; // check with getsockname
         unsigned short local_port_;
-        std::string remote_address_; // check with getpeername
+        struct in6_addr remote_address_; // check with getpeername
         unsigned short remote_port_;
         int uid;
     };
@@ -70,7 +72,7 @@ public:
     void parse_cfg(const std::string &fn);
     bool compare_ipv6(const std::string &ip, const std::string &mask,
                       int msize);
-    std::string canon_ipv6(const std::string &ip);
+    struct in6_addr canon_ipv6(const std::string &ip, bool *ok = NULL);
     std::vector<ProcTcpItem> tcp_items;
     std::vector<ConfigItem> cfg_items;
 };

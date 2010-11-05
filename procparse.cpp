@@ -3,6 +3,8 @@
 #include <sstream>
 #include <boost/regex.hpp>
 
+#include <string.h>
+
 void ProcParse::parse_tcp(const std::string &fn)
 {
     std::string l;
@@ -72,7 +74,8 @@ void ProcParse::parse_tcp(const std::string &fn)
             ds >> d;
             la6 << "0000:0000:0000:0000:0000:ffff:"
                 << m[4] << m[3] << ":" << m[2] << m[1];
-            ti.local_address_ = la6.str();
+            ti.local_address_ = canon_ipv6(la6.str());
+            //ti.local_address_ = la6.str();
             ls << std::hex << m[6] << m[5];
             ls >> ti.local_port_;
             es << std::hex << m[10];
@@ -85,7 +88,8 @@ void ProcParse::parse_tcp(const std::string &fn)
             hs >> h;
             ra6 << "0000:0000:0000:0000:0000:ffff:"
                 << m[10] << m[9] << ":" << m[8] << m[7];
-            ti.remote_address_ = ra6.str();
+            ti.remote_address_ = canon_ipv6(ra6.str());
+            //ti.remote_address_ = ra6.str();
             rs << std::hex << m[12] << m[11];
             rs >> ti.remote_port_;
             us << m[13];
@@ -93,10 +97,10 @@ void ProcParse::parse_tcp(const std::string &fn)
             tcp_items.push_back(ti);
 
             std::cout << "locl4: " << a << "." << b << "." << c << "." << d << "\n";
-            std::cout << "locl6: " << ti.local_address_ << "\n";
+            std::cout << "locl6: " << la6.str() << "\n";
             std::cout << "lport: " << ti.local_port_ << "\n";
             std::cout << "rmot4: " << e << "." << f << "." << g << "." << h << "\n";
-            std::cout << "rmot6: " << ti.remote_address_ << "\n";
+            std::cout << "rmot6: " << ra6.str() << "\n";
             std::cout << "rport: " << ti.remote_port_ << "\n";
             std::cout << "uid: " << m[13] << "\n";
         }
@@ -182,23 +186,23 @@ void ProcParse::parse_tcp6(const std::string &fn)
                 << m[8] << m[7] << ":" << m[6] << m[5] << ":"
                 << m[12] << m[11] << ":" << m[10] << m[9] << ":"
                 << m[16] << m[15] << ":" << m[14] << m[13];
-            ti.local_address_ = la6.str();
+            ti.local_address_ = canon_ipv6(la6.str());
             ls << std::hex << m[18] << m[17];
             ls >> ti.local_port_;
             ra6 << m[22] << m[21] << ":" << m[20] << m[19] << ":"
                 << m[26] << m[25] << ":" << m[24] << m[23] << ":"
                 << m[30] << m[29] << ":" << m[28] << m[27] << ":"
                 << m[34] << m[33] << ":" << m[32] << m[31];
-            ti.remote_address_ = ra6.str();
+            ti.remote_address_ = canon_ipv6(ra6.str());
             rs << std::hex << m[36] << m[35];
             rs >> ti.remote_port_;
             us << m[37];
             us >> ti.uid;
             tcp_items.push_back(ti);
 
-            std::cout << "local: " << ti.local_address_ << "\n";
+            std::cout << "local: " << la6.str() << "\n";
             std::cout << "lport: " << ti.local_port_ << "\n";
-            std::cout << "rmote: " << ti.remote_address_ << "\n";
+            std::cout << "rmote: " << ra6.str() << "\n";
             std::cout << "rport: " << ti.remote_port_ << "\n";
             std::cout << "uid: " << ti.uid << "\n";
         }
@@ -263,15 +267,21 @@ void ProcParse::parse_cfg(const std::string &fn)
             ConfigItem ci;
             std::stringstream mask, llport, hlport, lrport, hrport;
 
-            if (boost::regex_match(hoststr.c_str(), n, re6))
+            if (boost::regex_match(hoststr.c_str(), n, re6)) {
                 ci.type = HostIP6;
-            else if (boost::regex_match(hoststr.c_str(), n, re4))
+                ci.host = canon_ipv6(hoststr);
+            } else if (boost::regex_match(hoststr.c_str(), n, re4)) {
+                std::string tmpstr;
                 ci.type = HostIP4;
-            else if (boost::regex_match(hoststr.c_str(), n, rehost))
+                tmpstr += "::ffff:";
+                tmpstr += hoststr;
+                ci.host = canon_ipv6(tmpstr);
+            } else if (boost::regex_match(hoststr.c_str(), n, rehost)) {
                 ci.type = HostName;
-            else
+                std::cerr << "support for hostnames NYI\n";
+                ci.host = canon_ipv6("::1");
+            } else
                 continue; // invalid
-            ci.host = hoststr;
             mask << std::dec << m[2];
             mask >> ci.mask;
             llport << std::dec << m[3];
@@ -304,11 +314,11 @@ void ProcParse::parse_cfg(const std::string &fn)
             cfg_items.push_back(ci);
 
             if (ci.type == HostIP6)
-                std::cout << "ipv6: " << ci.host << "\n";
+                std::cout << "ipv6: " << hoststr << "\n";
             else if (ci.type == HostIP4)
-                std::cout << "ipv4: " << ci.host << "\n";
+                std::cout << "ipv4: " << hoststr << "\n";
             else if (ci.type == HostName)
-                std::cout << "host: " << ci.host << "\n";
+                std::cout << "host: " << hoststr << "\n";
             else
                 continue; // invalid
             std::cout << "mask size: " << ci.mask << "\n";
@@ -342,9 +352,24 @@ void ProcParse::parse_cfg(const std::string &fn)
 }
 
 // Forms a proper ipv6 address lacking '::' and '.'
-std::string ProcParse::canon_ipv6(const std::string &ip)
+struct in6_addr ProcParse::canon_ipv6(const std::string &ip, bool *ok)
 {
-    std::string ret;
+    struct in6_addr ret;
+    int r;
+
+    r = inet_pton(AF_INET6, ip.c_str(), &ret);
+    if (r == 0) {
+        if (ok)
+            *ok = false;
+        std::cerr << "canon_ipv6: not in presentation format\n";
+    } else if (r < 0) {
+        if (ok)
+            *ok = false;
+        std::cerr << "canon_ipv6: inet_pton() error " << strerror(errno) << "\n";
+    }
+    if (ok)
+        *ok = true;
+#if 0
     boost::cmatch m;
     //            1           2            3
     // 1234:5678:9012:3456:7890:1234:5678:9012  total :7
@@ -380,6 +405,7 @@ std::string ProcParse::canon_ipv6(const std::string &ip)
     } else if (boost::regex_match(ip.c_str(), m, boost::regex("(.+?)::(.+)"))) {
         // XXX: handle both sided-case
     }
+#endif
     return ret;
 }
 
