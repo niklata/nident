@@ -370,17 +370,52 @@ struct in6_addr ProcParse::canon_ipv6(const std::string &ip, bool *ok)
     return ret;
 }
 
-bool ProcParse::compare_ipv6(const std::string &ip, const std::string &mask,
+bool ProcParse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
                              int msize)
 {
-    boost::regex re6;
-    boost::cmatch m;
-    re6.assign("^(((?=(?>.*?::)(?!.*::)))(::)?(([0-9A-F]{1,4})::?){0,5}|((?5):){6})(\\2((?5)(::?|$)){0,2}|((25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])(\\.|$)){4}|(?5):(?5))(?<![^:]:|\\.)\\z",
-               boost::regex_constants::icase);
-    if (!boost::regex_match(ip.c_str(), m, re6))
-        return false;
-    if (!boost::regex_match(mask.c_str(), m, re6))
-        return false;
+    int *idx, *idxm;
+    idx = reinterpret_cast<int *>(&ip);
+    idxm = reinterpret_cast<int *>(&mask);
+    // network is always big endian
+    int d = idx[0];
+    int c = idx[1];
+    int b = idx[2];
+    int a = idx[3];
+    int md = idxm[0];
+    int mc = idxm[1];
+    int mb = idxm[2];
+    int ma = idxm[3];
 
-    return false;
+    int incl_dwords = msize / 32;
+    int incl_bits = msize % 32;
+    if (incl_dwords == 0 && incl_bits == 0) { // wildcard mask
+        return true;
+    } else if (incl_dwords == 0 && incl_bits) {
+        for (int i = 32 - incl_bits; i > 0; --i) {
+            a |= 1 << i;
+            ma |= 1 << i;
+        }
+        b = mb; c = mc; d = md;
+    } else if (incl_dwords == 1 && incl_bits) {
+        for (int i = 32 - incl_bits; i > 0; --i) {
+            b |= 1 << i;
+            mb |= 1 << i;
+        }
+        c = mc; d = md;
+    } else if (incl_dwords == 2 && incl_bits) {
+        for (int i = 32 - incl_bits; i > 0; --i) {
+            c |= 1 << i;
+            mc |= 1 << i;
+        }
+        d = md;
+    } else if (incl_dwords == 3 && incl_bits) {
+        for (int i = 32 - incl_bits; i > 0; --i) {
+            d |= 1 << i;
+            md |= 1 << i;
+        }
+    }
+    if (a == ma && b == mb && c == mc && d == md)
+        return true;
+    else
+        return false;
 }

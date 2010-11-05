@@ -70,8 +70,7 @@ public:
     void parse_tcp(const std::string &fn);
     void parse_tcp6(const std::string &fn);
     void parse_cfg(const std::string &fn);
-    bool compare_ipv6(const std::string &ip, const std::string &mask,
-                      int msize);
+    bool compare_ipv6(struct in6_addr ip, struct in6_addr mask, int msize);
     struct in6_addr canon_ipv6(const std::string &ip, bool *ok = NULL);
     std::vector<ProcTcpItem> tcp_items;
     std::vector<ConfigItem> cfg_items;

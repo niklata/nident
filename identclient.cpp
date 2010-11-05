@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-04 20:48:29 nk>
+ * Time-stamp: <2010-11-05 18:41:45 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -218,6 +218,60 @@ bool IdentClient::create_reply()
     pp.parse_tcp("/proc/net/tcp");
     pp.parse_tcp6("/proc/net/tcp6");
     pp.parse_cfg("/home/njk/.ident");
+
+    int port = -1;
+    struct in6_addr remote_address;
+
+    // getpeername
+    struct sockaddr_storage addr;
+    socklen_t len = sizeof addr;
+    if (getpeername(fd_, (struct sockaddr *)&addr, &len)) {
+        log_line("getpeername() error %s", strerror(errno));
+        return false;
+    }
+    if (addr.ss_family == AF_INET) {
+        char hoststr[32];
+        struct sockaddr_in *s = (struct sockaddr_in *)&addr;
+        int r;
+        port = ntohs(s->sin_port);
+        if (!inet_ntop(AF_INET, &s->sin_addr, hoststr, sizeof hoststr)) {
+            log_line("inet_ntop (ipv4): %s", strerror(errno));
+            return false;
+        }
+        std::cout << "remote host: [" << hoststr << "]:" << port << "\n";
+        std::string hoststr6;
+        hoststr6 += "::ffff:";
+        hoststr6 += hoststr;
+        r = inet_pton(AF_INET6, hoststr6.c_str(), &remote_address);
+        if (r == 0) {
+            log_line("inet_pton (ipv4): peer does not have a valid address");
+            return false;
+        } else if (r < 0) {
+            log_line("inet_pton (ipv4): %s", strerror(errno));
+            return false;
+        }
+    } else if (addr.ss_family == AF_INET6) {
+        char hoststr[32];
+        struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
+        int r;
+        port = ntohs(s->sin6_port);
+        if (!inet_ntop(AF_INET6, &s->sin6_addr, hoststr, sizeof hoststr)) {
+            log_line("inet_ntop (ipv6): %s", strerror(errno));
+            return false;
+        }
+        std::cout << "remote host: [" << hoststr << "]:" << port << "\n";
+        r = inet_pton(AF_INET6, hoststr, &remote_address);
+        if (r == 0) {
+            log_line("inet_pton (ipv6): peer does not have a valid address");
+            return false;
+        } else if (r < 0) {
+            log_line("inet_pton (ipv6): %s", strerror(errno));
+            return false;
+        }
+    } else {
+        log_line("getpeername(): returned unknown ss_family");
+        return false;
+    }
 
     std::stringstream ss;
     ss << server_port_ << "," << client_port_ << ":"
