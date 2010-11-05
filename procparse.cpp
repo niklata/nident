@@ -73,9 +73,8 @@ void ProcParse::parse_tcp(const std::string &fn)
             ds << std::hex << m[1];
             ds >> d;
             la6 << "0000:0000:0000:0000:0000:ffff:"
-                << m[4] << m[3] << ":" << m[2] << m[1];
+                << a << "." << b << "." << c << "." << d;
             ti.local_address_ = canon_ipv6(la6.str());
-            //ti.local_address_ = la6.str();
             ls << std::hex << m[6] << m[5];
             ls >> ti.local_port_;
             es << std::hex << m[10];
@@ -87,20 +86,19 @@ void ProcParse::parse_tcp(const std::string &fn)
             hs << std::hex << m[7];
             hs >> h;
             ra6 << "0000:0000:0000:0000:0000:ffff:"
-                << m[10] << m[9] << ":" << m[8] << m[7];
+                << e << "." << f << "." << g << "." << h;
             ti.remote_address_ = canon_ipv6(ra6.str());
-            //ti.remote_address_ = ra6.str();
             rs << std::hex << m[12] << m[11];
             rs >> ti.remote_port_;
             us << m[13];
             us >> ti.uid;
             tcp_items.push_back(ti);
 
-            std::cout << "locl4: " << a << "." << b << "." << c << "." << d << "\n";
-            std::cout << "locl6: " << la6.str() << "\n";
+            std::cout << "local: " << "0000:0000:0000:0000:0000:ffff:"
+                      << a << "." << b << "." << c << "." << d << "\n";
             std::cout << "lport: " << ti.local_port_ << "\n";
-            std::cout << "rmot4: " << e << "." << f << "." << g << "." << h << "\n";
-            std::cout << "rmot6: " << ra6.str() << "\n";
+            std::cout << "rmote: " << "0000:0000:0000:0000:0000:ffff:"
+                      << e << "." << f << "." << g << "." << h << "\n";
             std::cout << "rport: " << ti.remote_port_ << "\n";
             std::cout << "uid: " << m[13] << "\n";
         }
