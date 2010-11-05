@@ -367,43 +367,6 @@ struct in6_addr ProcParse::canon_ipv6(const std::string &ip, bool *ok)
     }
     if (ok)
         *ok = true;
-#if 0
-    boost::cmatch m;
-    //            1           2            3
-    // 1234:5678:9012:3456:7890:1234:5678:9012  total :7
-    // 0 colon -> 7 quads
-    // 1 colon -> 6 quads
-    // ...
-    // 7 colon -> 0 quads
-    if (boost::regex_match(ip.c_str(), m,
-                           boost::regex("::ffff:(25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9]).(25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9]).(25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9]).(25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])"))) {
-        // XXX: handle ::ffff:x.y.z.n
-    } else if (boost::regex_match(ip.c_str(), m, boost::regex("::(.+)"))) {
-        std::string right = m[1];
-        int num_colon = 0;
-        for (size_t i = 0; i < right.size(); ++i)
-            if (right.at(i) == ':')
-                ++num_colon;
-        int fill_quads = num_colon - 7;
-
-        for (int i = 0; i < fill_quads; ++i)
-            ret += "0000:";
-        ret += right;
-    } else if (boost::regex_match(ip.c_str(), m, boost::regex("(.+?)::"))) {
-        std::string left = m[1];
-        int num_colon = 0;
-        for (size_t i = 0; i < left.size(); ++i)
-            if (left.at(i) == ':')
-                ++num_colon;
-        int fill_quads = num_colon - 7;
-
-        ret += left;
-        for (int i = 0; i < fill_quads; ++i)
-            ret += ":0000";
-    } else if (boost::regex_match(ip.c_str(), m, boost::regex("(.+?)::(.+)"))) {
-        // XXX: handle both sided-case
-    }
-#endif
     return ret;
 }
 
