@@ -70,6 +70,7 @@ public:
     void parse_cfg(const std::string &fn);
     bool compare_ipv6(const std::string &ip, const std::string &mask,
                       int msize);
+    std::string canon_ipv6(const std::string &ip);
     std::vector<ProcTcpItem> tcp_items;
     std::vector<ConfigItem> cfg_items;
 };

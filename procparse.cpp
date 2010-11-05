@@ -231,7 +231,9 @@ void ProcParse::parse_cfg(const std::string &fn)
               "\\s+(?:\\*|(\\d{1,5})(?::(\\d{1,5}))?)"
               "\\s+(?:\\*|(\\d{1,5})(?::(\\d{1,5}))?)"
               "\\s*->\\s*([a-zA-Z0-9 \\t]+)");
-    re4.assign("^(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})");
+    re4.assign("^(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})"); // XXX: allows
+                                                                // broken IPs
+                                                                // -- fix
     re6.assign("^(((?=(?>.*?::)(?!.*::)))(::)?(([0-9A-F]{1,4})::?){0,5}|((?5):){6})(\\2((?5)(::?|$)){0,2}|((25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])(\\.|$)){4}|(?5):(?5))(?<![^:]:|\\.)\\z",
                boost::regex_constants::icase);
     rehost.assign("(?:\\.?[A-Za-z0-9-]{1,63})+");
@@ -341,8 +343,61 @@ void ProcParse::parse_cfg(const std::string &fn)
     f.close();
 }
 
+// Forms a proper ipv6 address lacking '::' and '.'
+std::string ProcParse::canon_ipv6(const std::string &ip)
+{
+    std::string ret;
+    boost::cmatch m;
+    //            1           2            3
+    // 1234:5678:9012:3456:7890:1234:5678:9012  total :7
+    // 0 colon -> 7 quads
+    // 1 colon -> 6 quads
+    // ...
+    // 7 colon -> 0 quads
+
+    // (?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])
+    if (boost::regex_match(ip.c_str(), m,
+                           boost::regex("::ffff:(\\d{1,3}).(\\d{1,3}).(\\d{1,3}).(\\d{1,3})"))) {
+        // XXX: handle ::ffff:x.y.z.n
+    } else if (boost::regex_match(ip.c_str(), m, boost::regex("::(.+)"))) {
+        std::string right = m[1];
+        int num_colon = 0;
+        for (size_t i = 0; i < right.size(); ++i)
+            if (right.at(i) == ':')
+                ++num_colon;
+        int fill_quads = num_colon - 7;
+
+        for (int i = 0; i < fill_quads; ++i)
+            ret += "0000:";
+        ret += right;
+    } else if (boost::regex_match(ip.c_str(), m, boost::regex("(.+?)::"))) {
+        std::string left = m[1];
+        int num_colon = 0;
+        for (size_t i = 0; i < left.size(); ++i)
+            if (left.at(i) == ':')
+                ++num_colon;
+        int fill_quads = num_colon - 7;
+
+        ret += left;
+        for (int i = 0; i < fill_quads; ++i)
+            ret += ":0000";
+    } else if (boost::regex_match(ip.c_str(), m, boost::regex("(.+?)::(.+)"))) {
+        // XXX: handle both sided-case
+    }
+    return ret;
+}
+
 bool ProcParse::compare_ipv6(const std::string &ip, const std::string &mask,
                              int msize)
 {
+    boost::regex re6;
+    boost::cmatch m;
+    re6.assign("^(((?=(?>.*?::)(?!.*::)))(::)?(([0-9A-F]{1,4})::?){0,5}|((?5):){6})(\\2((?5)(::?|$)){0,2}|((25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])(\\.|$)){4}|(?5):(?5))(?<![^:]:|\\.)\\z",
+               boost::regex_constants::icase);
+    if (!boost::regex_match(ip.c_str(), m, re6))
+        return false;
+    if (!boost::regex_match(mask.c_str(), m, re6))
+        return false;
+
     return false;
 }
