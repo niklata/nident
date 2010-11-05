@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-04 07:08:48 nk>
+ * Time-stamp: <2010-11-04 20:48:29 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -217,6 +217,7 @@ bool IdentClient::create_reply()
     ProcParse pp;
     pp.parse_tcp("/proc/net/tcp");
     pp.parse_tcp6("/proc/net/tcp6");
+    pp.parse_cfg("/home/njk/.ident");
 
     std::stringstream ss;
     ss << server_port_ << "," << client_port_ << ":"

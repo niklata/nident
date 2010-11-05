@@ -41,8 +41,7 @@ void ProcParse::parse_tcp(std::string fn)
               "\\s+[0-9a-fA-F]{2}:[0-9a-fA-F]{8}" // tr:tm->when
               "\\s+[0-9a-fA-F]{8}" // retrnsmt
               "\\s+(\\d+)" // uid
-              "\\s+\\d+.*" // timeout
-              , boost::regex_constants::icase);
+              "\\s+\\d+.*"); // timeout
 
     while (1) {
         std::getline(f, l);
@@ -91,7 +90,7 @@ void ProcParse::parse_tcp(std::string fn)
             rs >> ti.remote_port_;
             us << m[13];
             us >> ti.uid;
-            items.push_back(ti);
+            tcp_items.push_back(ti);
 
             std::cout << "locl4: " << a << "." << b << "." << c << "." << d << "\n";
             std::cout << "locl6: " << ti.local_address_ << "\n";
@@ -160,8 +159,7 @@ void ProcParse::parse_tcp6(std::string fn)
               "\\s+[0-9a-fA-F]{2}:[0-9a-fA-F]{8}" // tr:tm->when
               "\\s+[0-9a-fA-F]{8}" // retrnsmt
               "\\s+(\\d+)" // uid
-              "\\s+\\d+.*" // timeout
-              , boost::regex_constants::icase);
+              "\\s+\\d+.*"); // timeout
 
     while (1) {
         std::getline(f, l);
@@ -196,6 +194,7 @@ void ProcParse::parse_tcp6(std::string fn)
             rs >> ti.remote_port_;
             us << m[37];
             us >> ti.uid;
+            tcp_items.push_back(ti);
 
             std::cout << "local: " << ti.local_address_ << "\n";
             std::cout << "lport: " << ti.local_port_ << "\n";
@@ -206,3 +205,123 @@ void ProcParse::parse_tcp6(std::string fn)
     }
     f.close();
 }
+
+void ProcParse::parse_cfg(std::string fn)
+{
+    std::string l;
+    std::ifstream f(fn, std::ifstream::in);
+    boost::regex re, re4, re6, rehost;
+    boost::regex re_accept, re_deny, re_spoof, re_hash;
+    boost::cmatch m;
+
+    if (f.fail() || f.bad() || f.eof()) {
+        std::cerr << "failed to open file: '" << fn << "'";
+        return;
+    }
+
+    // x.x.x.x[/n] (*|l[:h]) (*|l[:h]) -> POLICY
+    // x:x:x:x:x:x:x:x[/n] (*|l[:h]) (*|l[:h]) -> POLICY
+    // x:x...x[::][/n] (*|l[:h]) (*|l[:h]) -> POLICY
+    // POLICY:
+    // deny||accept
+    // spoof string
+    // hash [uid] [ip] [sp] [dp]
+    re.assign("\\s*([a-zA-Z0-9:.-]+)"//"\\s*([0-9A-Fa-f:.]+)" // ipv[46]
+              "(?:/(\\d{1,2}))?"
+              "\\s+(?:\\*|(\\d{1,5})(?::(\\d{1,5}))?)"
+              "\\s+(?:\\*|(\\d{1,5})(?::(\\d{1,5}))?)"
+              "\\s*->\\s*([a-zA-Z0-9 \\t]+)");
+    re4.assign("^(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})");
+    re6.assign("^(((?=(?>.*?::)(?!.*::)))(::)?(([0-9A-F]{1,4})::?){0,5}|((?5):){6})(\\2((?5)(::?|$)){0,2}|((25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])(\\.|$)){4}|(?5):(?5))(?<![^:]:|\\.)\\z",
+               boost::regex_constants::icase);
+    rehost.assign("(?:\\.?[A-Za-z0-9-]{1,63})+");
+    re_deny.assign("^deny\\s*", boost::regex_constants::icase);
+    re_accept.assign("^accept\\s*", boost::regex_constants::icase);
+    re_spoof.assign("^spoof\\s+([A-Za-z0-9]+)\\s*",
+                    boost::regex_constants::icase);
+    re_hash.assign("^hash(\\s+(?:uid|ip|sp|dp))+\\s*",
+                   boost::regex_constants::icase);
+
+    while (1) {
+        std::getline(f, l);
+        std::cout << "\n" << l << "\n";
+        if (f.eof()) {
+            std::cerr << "end of tcp connections\n";
+            break;
+        } else if (f.bad()) {
+            std::cerr << "fatal io error fetching line of proc/net/tcp\n";
+            break;
+        } else if (f.fail()) {
+            std::cerr << "non-fatal io error fetching line of proc/net/tcp\n";
+            break;
+        }
+
+        if (boost::regex_match(l.c_str(), m, re)) {
+            const std::string hoststr = m[1];
+            const std::string polstr = m[7];
+            boost::cmatch n, o;
+            ConfigItem ci;
+            std::stringstream mask, llport, hlport, lrport, hrport;
+
+            if (boost::regex_match(hoststr.c_str(), n, re6))
+                ci.type = HostIP6;
+            else if (boost::regex_match(hoststr.c_str(), n, re4))
+                ci.type = HostIP4;
+            else if (boost::regex_match(hoststr.c_str(), n, rehost))
+                ci.type = HostName;
+            else
+                continue; // invalid
+            ci.host = hoststr;
+            mask << std::dec << m[2];
+            mask >> ci.mask;
+            llport << std::dec << m[3];
+            llport >> ci.low_lport;
+            hlport << std::dec << m[4];
+            hlport >> ci.high_lport;
+            lrport << std::dec << m[5];
+            lrport >> ci.low_rport;
+            hrport << std::dec << m[6];
+            hrport >> ci.high_rport;
+            if (boost::regex_match(polstr.c_str(), o, re_deny)) {
+                ci.policy.action = PolicyDeny;
+            } else if (boost::regex_match(polstr.c_str(), o, re_accept)) {
+                ci.policy.action = PolicyAccept;
+            } else if (boost::regex_match(polstr.c_str(), o, re_spoof)) {
+                ci.policy.action = PolicySpoof;
+                ci.policy.spoof = o[1];
+            } else if (boost::regex_match(polstr.c_str(), o, re_hash)) {
+                ci.policy.action = PolicyHash;
+                // XXX: match the types
+            } else
+                continue; // invalid
+            cfg_items.push_back(ci);
+
+            if (ci.type == HostIP6)
+                std::cout << "ipv6: " << ci.host << "\n";
+            else if (ci.type == HostIP4)
+                std::cout << "ipv4: " << ci.host << "\n";
+            else if (ci.type == HostName)
+                std::cout << "host: " << ci.host << "\n";
+            else
+                continue; // invalid
+            std::cout << "mask size: " << ci.mask << "\n";
+            std::cout << "local low port: " << ci.low_lport << "\n";
+            std::cout << "local high port: " << ci.high_lport << "\n";
+            std::cout << "remote low port: " << ci.low_rport << "\n";
+            std::cout << "remote high port: " << ci.high_rport << "\n";
+            if (ci.policy.action == PolicyDeny)
+                std::cout << "Policy: deny\n";
+            else if (ci.policy.action == PolicyAccept)
+                std::cout << "Policy: accept\n";
+            else if (ci.policy.action == PolicySpoof)
+                std::cout << "Policy: spoof [" << ci.policy.spoof << "]\n";
+            else if (ci.policy.action == PolicyHash)
+                std::cout << "Policy: hash [NYI]\n";
+            else
+                continue; // invalid
+        }
+    }
+    std::cout << "end of config\n";
+    f.close();
+}
+
