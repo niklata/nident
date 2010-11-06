@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 07:25:15 nk>
+ * Time-stamp: <2010-11-06 07:27:06 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -513,42 +513,32 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
     if (cmatched) {
         std::vector<ProcTcpItem>::iterator t;
         for (t = tcp_items.begin(); t != tcp_items.end(); ++t) {
-            std::cout << "rp: " << t->remote_port_ << " cp: " << cp << "\n";
             if (t->remote_port_ != cp)
                 continue;
-            std::cout << "1";
             if (t->local_port_ != sp)
                 continue;
-            std::cout << "2";
             if (memcmp(&t->remote_address_, &ca, sizeof (struct in6_addr)))
                 continue;
-            std::cout << "3";
             if (memcmp(&t->local_address_, &sa, sizeof (struct in6_addr)))
                 continue;
-            std::cout << "4";
             uid = t->uid;
             if (c->policy.action == PolicyNone) {
-                std::cout << "action: PolicyNone\n";
                 if (gParanoid)
                     ss << "ERROR:UNKNOWN-ERROR";
                 else
                     ss << "ERROR:NO-USER";
             } else if (c->policy.action == PolicyAccept) {
-                std::cout << "action: PolicyAccept\n";
                 ss << "USERID:UNIX:";
                 ss << uid;
             } else if (c->policy.action == PolicyDeny) {
-                std::cout << "action: PolicyDeny\n";
                 if (gParanoid)
                     ss << "ERROR:UNKNOWN-ERROR";
                 else
                     ss << "ERROR:HIDDEN-USER";
             } else if (c->policy.action == PolicySpoof) {
-                std::cout << "action: PolicySpoof\n";
                 ss << "USERID:UNIX:";
                 ss << c->policy.spoof;
             } else if (c->policy.action == PolicyHash) {
-                std::cout << "action: PolicyHash\n";
                 std::stringstream sh;
                 std::string hashstr;
                 if (c->policy.isHashUID())
@@ -574,7 +564,6 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
             break;
         }
     } else {
-        std::cout << "action: default (no hits)\n";
         if (gParanoid)
             ss << "ERROR:UNKNOWN-ERROR";
         else
