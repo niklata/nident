@@ -1,5 +1,5 @@
 /* parse.hpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 19:16:53 nk>
+ * Time-stamp: <2010-11-06 19:31:05 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -88,24 +88,29 @@ public:
         }
     };
     struct ProcTcpItem {
-        struct in6_addr local_address_; // check with getsockname
-        unsigned short local_port_;
-        struct in6_addr remote_address_; // check with getpeername
-        unsigned short remote_port_;
+        struct in6_addr local_address_;
+        int local_port_;
+        struct in6_addr remote_address_;
+        int remote_port_;
         int uid;
+        ProcTcpItem() {
+            local_port_ = -1;
+            remote_port_ = -1;
+            uid = -1;
+        }
     };
     std::string get_response(struct in6_addr sa, int sp,
                              struct in6_addr ca, int cp);
-    void parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
+    int parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
                    struct in6_addr ca, int cp);
-    void parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
+    int parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
                     struct in6_addr ca, int cp);
     void parse_cfg(const std::string &fn);
 private:
     bool compare_ipv6(struct in6_addr ip, struct in6_addr mask, int msize);
     struct in6_addr canon_ipv6(const std::string &ip, bool *ok = NULL);
     std::string compress_64_to_unix(uint64_t qword);
-    std::vector<ProcTcpItem> tcp_items;
+    ProcTcpItem ti_;
     std::vector<ConfigItem> cfg_items;
 };
 
