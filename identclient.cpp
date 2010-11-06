@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-05 23:29:47 nk>
+ * Time-stamp: <2010-11-05 23:34:15 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -35,7 +35,7 @@
 
 #include "epoll.hpp"
 #include "identclient.hpp"
-#include "procparse.hpp"
+#include "parse.hpp"
 
 extern "C" {
 #include "log.h"
@@ -293,10 +293,10 @@ bool IdentClient::create_reply()
     log_line("serverport: %i\t clientport: %i", server_port_, client_port_);
 
     // XXX: do real work for a real response
-    ProcParse pp;
-    pp.parse_tcp("/proc/net/tcp");
-    pp.parse_tcp6("/proc/net/tcp6");
-    pp.parse_cfg("/home/njk/.ident");
+    Parse pa;
+    pa.parse_tcp("/proc/net/tcp");
+    pa.parse_tcp6("/proc/net/tcp6");
+    pa.parse_cfg("/home/njk/.ident");
 
     if (!get_local_info())
         return false;

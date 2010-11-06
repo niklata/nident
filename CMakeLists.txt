@@ -13,7 +13,7 @@ link_directories ( ${Boost_LIBRARY_DIRS} )
 include_directories ( ${Boost_INCLUDE_DIRS} )
 
 set(NIDENT_SRCS
-  procparse.cpp
+  parse.cpp
   identclient.cpp
   epoll.cpp
   nident.cpp
