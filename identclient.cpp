@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-05 23:14:39 nk>
+ * Time-stamp: <2010-11-05 23:20:57 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -45,8 +45,6 @@ unsigned int max_client_bytes = 128;
 
 IdentClient::IdentClient(int fd) : fd_(fd) {
     state_ = STATE_WAITIN;
-    server_port_ = -1;
-    client_port_ = -1;
     server_port_ = -1;
     client_port_ = -1;
     response_ = "ERROR";
