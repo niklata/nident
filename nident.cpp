@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-11-06 00:51:28 nk>
+ * Time-stamp: <2010-11-06 08:12:31 nk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
 		    "  -d, --detach                detach from TTY and daemonize (default)\n"
 		    "  -n, --nodetach              stay attached to TTY\n"
 		    "  -q, --quiet                 don't print to std(out|err) or log\n"
-		    "  -c, --config-dir                configuration directory\n"
+		    "  -c, --config-dir            configuration directory\n"
 		    "  -e, --max-events            max events processed per epoll_wait\n");
 		printf(
 		    "  -b, --backlog               maximum simultaneous connections accepted\n"
