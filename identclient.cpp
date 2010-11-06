@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-06 08:38:13 nk>
+ * Time-stamp: <2010-11-06 08:51:35 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -191,7 +191,8 @@ bool IdentClient::parse_request()
 }
 
 bool IdentClient::decipher_addr(const struct sockaddr_storage &addr,
-                                struct in6_addr *addy, const char *pstr)
+                                struct in6_addr *addy, std::string *addyp,
+                                const char *pstr)
 {
     if (addr.ss_family == AF_INET) {
         char hoststr[32];
@@ -202,6 +203,8 @@ bool IdentClient::decipher_addr(const struct sockaddr_storage &addr,
             log_line("inet_ntop (ipv4): %s", strerror(errno));
             return false;
         }
+        if (addyp)
+            *addyp = hoststr;
         std::cout << pstr << " host: [" << hoststr << "]:" << port << "\n";
         std::string hoststr6;
         hoststr6 += "::ffff:";
@@ -223,6 +226,8 @@ bool IdentClient::decipher_addr(const struct sockaddr_storage &addr,
             log_line("inet_ntop (ipv6): %s", strerror(errno));
             return false;
         }
+        if (addyp)
+            *addyp = hoststr;
         std::cout << pstr << " host: [" << hoststr << "]:" << port << "\n";
         r = inet_pton(AF_INET6, hoststr, addy);
         if (r == 0) {
@@ -248,7 +253,7 @@ bool IdentClient::get_local_info()
         log_line("getsockname() error %s", strerror(errno));
         return false;
     }
-    if (decipher_addr(addr, &server_address_, "local"))
+    if (decipher_addr(addr, &server_address_, NULL, "local"))
         return true;
     else
         return false;
@@ -263,7 +268,8 @@ bool IdentClient::get_peer_info()
         log_line("getpeername() error %s", strerror(errno));
         return false;
     }
-    if (decipher_addr(addr, &client_address_, "remote"))
+    if (decipher_addr(addr, &client_address_,
+                      &client_address_pretty_, "remote"))
         return true;
     else
         return false;
@@ -293,7 +299,8 @@ bool IdentClient::create_reply()
 
     outbuf_ = reply;
     outbuf_ += "\r\n";
-    log_line("reply: %s", outbuf_.c_str()); // XXX
+    log_line("(%s) %d,%d -> %s", client_address_pretty_.c_str(),
+             server_port_, client_port_, reply.c_str());
     state_ = STATE_WAITOUT;
     schedule_write(fd_);
     return true;

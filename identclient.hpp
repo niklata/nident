@@ -1,5 +1,5 @@
 /* identclient.hpp - ident client request handling
- * Time-stamp: <2010-11-05 23:49:35 nk>
+ * Time-stamp: <2010-11-06 08:48:31 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -49,6 +49,7 @@ public:
 
     struct in6_addr server_address_;
     struct in6_addr client_address_;
+    std::string client_address_pretty_;
 
     int server_port_; // Port on the local machine this server is running on.
     int client_port_; // Port on the remote machine making the ident request.
@@ -64,7 +65,8 @@ public:
     bool process_output();
 private:
     bool decipher_addr(const struct sockaddr_storage &addr,
-                       struct in6_addr *addy, const char *pstr);
+                       struct in6_addr *addy, std::string *addyp,
+                       const char *pstr);
 };
 
 extern unsigned int max_client_bytes;
