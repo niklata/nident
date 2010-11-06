@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 03:39:45 nk>
+ * Time-stamp: <2010-11-06 03:51:39 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -412,7 +412,9 @@ bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
     unsigned int *idx, *idxm;
     idx = reinterpret_cast<unsigned int *>(&ip);
     idxm = reinterpret_cast<unsigned int *>(&mask);
-    // network is always big endian
+
+    // these are stored in host byte order, not network byte order
+#ifndef __BIG_ENDIAN__
     unsigned int d = idx[0];
     unsigned int c = idx[1];
     unsigned int b = idx[2];
@@ -421,7 +423,16 @@ bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
     unsigned int mc = idxm[1];
     unsigned int mb = idxm[2];
     unsigned int ma = idxm[3];
-
+#else
+    unsigned int a = idx[0];
+    unsigned int b = idx[1];
+    unsigned int c = idx[2];
+    unsigned int d = idx[3];
+    unsigned int ma = idxm[0];
+    unsigned int mb = idxm[1];
+    unsigned int mc = idxm[2];
+    unsigned int md = idxm[3];
+#endif
     char buf[32];
     inet_ntop(AF_INET6, &ip, buf, sizeof buf);
     std::cout << "cmp ip: " << buf << "\n";
