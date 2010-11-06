@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-05 23:33:39 nk>
+ * Time-stamp: <2010-11-06 01:24:52 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -29,10 +29,13 @@
 
 #include "parse.hpp"
 
+#include <string.h>
+#include <iostream>
+#include <fstream>
 #include <sstream>
 #include <boost/regex.hpp>
 
-#include <string.h>
+extern bool gParanoid;
 
 void Parse::parse_tcp(const std::string &fn)
 {
@@ -402,18 +405,18 @@ struct in6_addr Parse::canon_ipv6(const std::string &ip, bool *ok)
 bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
                          int msize)
 {
-    int *idx, *idxm;
-    idx = reinterpret_cast<int *>(&ip);
-    idxm = reinterpret_cast<int *>(&mask);
+    unsigned int *idx, *idxm;
+    idx = reinterpret_cast<unsigned int *>(&ip);
+    idxm = reinterpret_cast<unsigned int *>(&mask);
     // network is always big endian
-    int d = idx[0];
-    int c = idx[1];
-    int b = idx[2];
-    int a = idx[3];
-    int md = idxm[0];
-    int mc = idxm[1];
-    int mb = idxm[2];
-    int ma = idxm[3];
+    unsigned int d = idx[0];
+    unsigned int c = idx[1];
+    unsigned int b = idx[2];
+    unsigned int a = idx[3];
+    unsigned int md = idxm[0];
+    unsigned int mc = idxm[1];
+    unsigned int mb = idxm[2];
+    unsigned int ma = idxm[3];
 
     int incl_dwords = msize / 32;
     int incl_bits = msize % 32;
@@ -447,4 +450,84 @@ bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
         return true;
     else
         return false;
+}
+
+// XXX: extend config format to mask by local address?
+std::string Parse::get_response(struct in6_addr sa, int sp,
+                                struct in6_addr ca, int cp)
+{
+    std::stringstream ss;
+    std::string ret;
+
+    bool cmatched = false;
+    int uid;
+    std::vector<ConfigItem>::iterator c;
+    for (c = cfg_items.begin(); c != cfg_items.end(); ++c) {
+        if (!compare_ipv6(ca, c->host, c->mask == -1 ? 128 : c->mask))
+            continue;
+        if (c->low_lport != -1 && sp < c->low_lport)
+            continue;
+        if (c->high_lport != -1 && sp > c->high_lport)
+            continue;
+        if (c->low_rport != -1 && cp < c->low_rport)
+            continue;
+        if (c->high_rport != -1 && cp > c->high_rport)
+            continue;
+        // Found our match.
+        cmatched = true;
+        break;
+    }
+    if (cmatched) {
+        std::vector<ProcTcpItem>::iterator t;
+        for (t = tcp_items.begin(); t != tcp_items.end(); ++t) {
+            if (t->remote_port_ != cp)
+                continue;
+            if (t->local_port_ != sp)
+                continue;
+            if (memcmp(&t->remote_address_, &ca, sizeof (struct in6_addr)))
+                continue;
+            if (memcmp(&t->local_address_, &sa, sizeof (struct in6_addr)))
+                continue;
+            uid = t->uid;
+            if (c->policy.action == PolicyNone) {
+                std::cout << "action: PolicyNone\n";
+                if (gParanoid)
+                    ss << "ERROR:UNKNOWN-ERROR";
+                else
+                    ss << "ERROR:NO-USER";
+            } else if (c->policy.action == PolicyAccept) {
+                std::cout << "action: PolicyAccept\n";
+                ss << "USERID:UNIX:";
+                ss << uid;
+            } else if (c->policy.action == PolicyDeny) {
+                std::cout << "action: PolicyDeny\n";
+                if (gParanoid)
+                    ss << "ERROR:UNKNOWN-ERROR";
+                else
+                    ss << "ERROR:HIDDEN-USER";
+            } else if (c->policy.action == PolicySpoof) {
+                std::cout << "action: PolicySpoof\n";
+                ss << "USERID:UNIX:";
+                ss << c->policy.spoof;
+            } else if (c->policy.action == PolicyHash) {
+                std::cout << "action: PolicyHash\n";
+                // XXX NYI, bool policy->is*()
+                // fHashNone = 0,
+                //     fHashUID = 1,
+                //     fHashIP = 2,
+                //     fHashSP = 4,
+                //     fHashDP = 8
+                ss << "USERID:UNIX:hash-NYI";
+            }
+            break;
+        }
+    } else {
+        std::cout << "action: default (no hits)\n";
+        if (gParanoid)
+            ss << "ERROR:UNKNOWN-ERROR";
+        else
+            ss << "ERROR:NO-USER";
+    }
+    ss >> ret;
+    return ret;
 }

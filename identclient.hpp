@@ -1,5 +1,5 @@
 /* identclient.hpp - ident client request handling
- * Time-stamp: <2010-11-05 23:27:21 nk>
+ * Time-stamp: <2010-11-05 23:49:35 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -52,8 +52,6 @@ public:
 
     int server_port_; // Port on the local machine this server is running on.
     int client_port_; // Port on the remote machine making the ident request.
-    std::string response_;
-    std::string add_info_;
 
     IdentClient(int fd);
     ~IdentClient();

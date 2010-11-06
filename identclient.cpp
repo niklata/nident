@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-05 23:34:15 nk>
+ * Time-stamp: <2010-11-06 01:26:21 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -28,9 +28,9 @@
  */
 
 #include <sstream>
+#include <iostream>
 
 #include <unistd.h>
-#include <stdlib.h> // atoi
 #include <string.h> // memset
 
 #include "epoll.hpp"
@@ -47,8 +47,6 @@ IdentClient::IdentClient(int fd) : fd_(fd) {
     state_ = STATE_WAITIN;
     server_port_ = -1;
     client_port_ = -1;
-    response_ = "ERROR";
-    add_info_ = "NO-USER";
 }
 
 IdentClient::~IdentClient() {
@@ -135,7 +133,9 @@ bool IdentClient::parse_request()
                     continue;
                 case ',': {
                     std::string sport = inbuf_.substr(prev_idx, i);
-                    server_port_ = atoi(sport.c_str());
+                    std::stringstream ss;
+                    ss << sport;
+                    ss >> server_port_;
                     state = ParseClientPort;
                     prev_idx = i + 1;
                     found_num = false;
@@ -196,7 +196,9 @@ bool IdentClient::parse_request()
     if (state == ParseClientPort && found_num) {
         log_line("... prev_idx: %d, i: %d", prev_idx, i);
         std::string cport = inbuf_.substr(prev_idx, i);
-        client_port_ = atoi(cport.c_str());
+        std::stringstream ss;
+        ss << cport;
+        ss >> client_port_;
         state = ParseDone;
         return true;
     }
@@ -292,7 +294,6 @@ bool IdentClient::create_reply()
     }
     log_line("serverport: %i\t clientport: %i", server_port_, client_port_);
 
-    // XXX: do real work for a real response
     Parse pa;
     pa.parse_tcp("/proc/net/tcp");
     pa.parse_tcp6("/proc/net/tcp6");
@@ -303,13 +304,12 @@ bool IdentClient::create_reply()
     if (!get_peer_info())
         return false;
 
-    // XXX: extend config format to mask by local address?
+    std::string reply = pa.get_response(server_address_, server_port_,
+                                        client_address_, client_port_);
 
-    std::stringstream ss;
-    ss << server_port_ << "," << client_port_ << ":"
-       << response_ << ":" << add_info_ << "\r\n";
-    outbuf_ = ss.str();
-    log_line("reply: %s", ss.str().c_str());
+    outbuf_ = reply;
+    outbuf_ += "\r\n";
+    log_line("reply: %s", outbuf_.c_str());
     state_ = STATE_WAITOUT;
     schedule_write(fd_);
     return true;

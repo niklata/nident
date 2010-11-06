@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-11-03 13:07:10 nk>
+ * Time-stamp: <2010-11-06 00:51:28 nk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -67,6 +67,8 @@ extern "C" {
 #include "network.h"
 #include "strlist.h"
 }
+
+bool gParanoid = true;
 
 static volatile sig_atomic_t pending_reap;
 volatile sig_atomic_t pending_exit;
