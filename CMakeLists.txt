@@ -21,3 +21,5 @@ set(NIDENT_SRCS
 
 add_executable(nident ${NIDENT_SRCS})
 target_link_libraries(nident ${Boost_REGEX_LIBRARY} ncmlib)
+
+add_executable(tiger tiger.c sboxes.c testtiger.c)
