@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 05:40:47 nk>
+ * Time-stamp: <2010-11-06 07:25:15 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -313,7 +313,7 @@ void Parse::parse_cfg(const std::string &fn)
                 ci.type = HostName;
                 // XXX support hostnames in config file
                 std::cerr << "support for hostnames NYI\n";
-                ci.host = canon_ipv6("::1");
+                continue;
             } else
                 continue; // invalid
             mask << std::dec << m[2];
