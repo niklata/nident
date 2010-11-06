@@ -1,5 +1,5 @@
 /* epoll.cpp - ident server event handling
- * Time-stamp: <2010-11-04 05:02:16 nk>
+ * Time-stamp: <2010-11-06 08:38:50 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -98,7 +98,6 @@ static void accept_conns(int lsock)
 
     for(;;)
     {
-        log_line("accept(lsock = %i)", lsock);
         int fd = accept(lsock, (struct sockaddr *) &sock_addr, &sock_len);
 
         if (fd != -1) {
@@ -157,7 +156,6 @@ void epoll_init(int *sockets)
         ev.data.fd = sockets[i];
         if (epoll_ctl(epollfd, EPOLL_CTL_ADD, sockets[i], &ev) == -1)
             suicide("epoll_ctl failed");
-        log_line("added lsock = %i", sockets[i]);
     }
     free(sockets);
 }
@@ -180,14 +178,12 @@ void epoll_dispatch_work(void)
             int fd = events[i].data.fd;
             std::map<int, IdentClient *>::iterator iter = clientmap.find(fd);
             if (iter == clientmap.end()) {
-                log_line("listen fd (%d) EPOLLIN", fd);
                 if (events[i].events & EPOLLIN)
                     accept_conns(fd);
                 else if (events[i].events & EPOLLHUP)
                     suicide("listen fd got a HUP");
             } else {
                 if (events[i].events & EPOLLIN) {
-                    log_line("client fd (%d) EPOLLIN", fd);
                     IdentClient *id = iter->second;
                     if (!id->process_input()) {
                         unschedule_read(fd);
@@ -196,7 +192,6 @@ void epoll_dispatch_work(void)
                         continue;
                     }
                 } else if (events[i].events & EPOLLOUT) {
-                    log_line("client fd (%d) EPOLLOUT", fd);
                     IdentClient *id = iter->second;
                     if (!id->process_output()) {
                         unschedule_write(fd);
@@ -205,7 +200,6 @@ void epoll_dispatch_work(void)
                         continue;
                     }
                 } else if (events[i].events & EPOLLHUP) {
-                    log_line("client fd (%d) EPOLLHUP", fd);
                     IdentClient *id = iter->second;
                     if (id->state_ == IdentClient::STATE_WAITIN)
                         unschedule_read(fd);
@@ -216,7 +210,6 @@ void epoll_dispatch_work(void)
                     continue;
                 }
             }
-            log_line("did nothing: events[%i].data.fd = %i", i, fd);
         }
     }
 }

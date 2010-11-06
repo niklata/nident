@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-06 08:25:15 nk>
+ * Time-stamp: <2010-11-06 08:38:13 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -51,7 +51,6 @@ IdentClient::IdentClient(int fd) : fd_(fd) {
 
 IdentClient::~IdentClient() {
     close(fd_);
-    log_line("fd %d: destructor called", fd_);
 }
 
 // Returns false if the object needs to be destroyed by the caller.
@@ -59,16 +58,13 @@ IdentClient::~IdentClient() {
 bool IdentClient::process_input()
 {
     if (state_ != STATE_WAITIN) {
-        log_line("process_input: state is not STATE_WAITIN");
         return false;
     }
     char buf[max_client_bytes];
     memset(buf, 0, sizeof buf);
     ssize_t len = 0;
     while (len < max_client_bytes) {
-        log_line("read(%d, %d, %d)", fd_, buf+len, (sizeof buf) - len);
         ssize_t r = read(fd_, buf + len, (sizeof buf) - len);
-        log_line("r = %d", r);
         if (r == 0)
             break;
         if (r == -1) {
@@ -87,7 +83,6 @@ bool IdentClient::process_input()
         return false;
 
     for (int i = 0; i < len; ++i) {
-        log_line("buf[%d] = %d", i, buf[i]);
         if (buf[i] == '\n' || buf[i] == '\r') {
             inbuf_ += buf[i];
             state_ = STATE_GOTIN;
@@ -127,7 +122,6 @@ bool IdentClient::parse_request()
             switch (c) {
                 case ' ':
                 case '\t':
-                    log_line("ws");
                     if (found_num)
                         found_ws_after_num = true;
                     continue;
@@ -140,7 +134,6 @@ bool IdentClient::parse_request()
                     prev_idx = i + 1;
                     found_num = false;
                     found_ws_after_num = false;
-                    log_line("sport: %d", server_port_);
                     continue;
                 }
                 case '0': case '1': case '2': case '3': case '4':
@@ -151,21 +144,17 @@ bool IdentClient::parse_request()
                     }
                     if (found_ws_after_num) {
                         state = ParseInvalid;
-                        log_line("!");
                         return false;
                     }
-                    log_line("#");
                     continue;
                 default:
                     state = ParseInvalid;
-                    log_line("!");
                     return false;
             }
         } else if (state == ParseClientPort) {
             switch (c) {
                 case ' ':
                 case '\t':
-                    log_line("ws");
                     if (found_num)
                         found_ws_after_num = true;
                     continue;
@@ -180,21 +169,17 @@ bool IdentClient::parse_request()
                     }
                     if (found_ws_after_num) {
                         state = ParseInvalid;
-                        log_line("!");
                         return false;
                     }
-                    log_line("#");
                     continue;
                 default:
                     state = ParseInvalid;
-                    log_line("!");
                     return false;
             }
         }
     }
   eol:
     if (state == ParseClientPort && found_num) {
-        log_line("... prev_idx: %d, i: %d", prev_idx, i);
         std::string cport = inbuf_.substr(prev_idx, i);
         std::stringstream ss;
         ss << cport;
@@ -292,7 +277,6 @@ bool IdentClient::create_reply()
     if (!parse_request()) {
         return false;
     }
-    log_line("serverport: %i\t clientport: %i", server_port_, client_port_);
 
     Parse pa;
     pa.parse_tcp("/proc/net/tcp");
@@ -309,7 +293,7 @@ bool IdentClient::create_reply()
 
     outbuf_ = reply;
     outbuf_ += "\r\n";
-    log_line("reply: %s", outbuf_.c_str());
+    log_line("reply: %s", outbuf_.c_str()); // XXX
     state_ = STATE_WAITOUT;
     schedule_write(fd_);
     return true;
