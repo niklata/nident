@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-06 19:00:15 nk>
+ * Time-stamp: <2010-11-06 19:21:12 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -298,9 +298,11 @@ bool IdentClient::create_reply()
 
     Parse pa;
     if (client_type_ == HostIP4)
-        pa.parse_tcp("/proc/net/tcp");
+        pa.parse_tcp("/proc/net/tcp", server_address_, server_port_,
+                     client_address_, client_port_);
     if (client_type_ == HostIP6)
-        pa.parse_tcp6("/proc/net/tcp6");
+        pa.parse_tcp6("/proc/net/tcp6", server_address_, server_port_,
+                      client_address_, client_port_);
     pa.parse_cfg("/home/njk/.ident"); // XXX:
 
     std::string reply = pa.get_response(server_address_, server_port_,

@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 09:02:17 nk>
+ * Time-stamp: <2010-11-06 19:20:52 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -44,7 +44,8 @@ extern "C" {
 
 extern bool gParanoid;
 
-void Parse::parse_tcp(const std::string &fn)
+void Parse::parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
+                      struct in6_addr ca, int cp)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
@@ -130,7 +131,13 @@ void Parse::parse_tcp(const std::string &fn)
             rs >> ti.remote_port_;
             us << m[13];
             us >> ti.uid;
-            tcp_items.push_back(ti);
+            if (ti.remote_port_ == cp && ti.local_port_ == sp) {
+                if (memcmp(&ti.remote_address_, &ca, sizeof (struct in6_addr)))
+                    continue;
+                if (memcmp(&ti.local_address_, &sa, sizeof (struct in6_addr)))
+                    continue;
+                tcp_items.push_back(ti);
+            }
 #if 0
             std::cout << "local: " << "0000:0000:0000:0000:0000:ffff:"
                       << a << "." << b << "." << c << "." << d << "\n";
@@ -145,7 +152,8 @@ void Parse::parse_tcp(const std::string &fn)
     f.close();
 }
 
-void Parse::parse_tcp6(const std::string &fn)
+void Parse::parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
+                       struct in6_addr ca, int cp)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
@@ -234,7 +242,13 @@ void Parse::parse_tcp6(const std::string &fn)
             rs >> ti.remote_port_;
             us << m[37];
             us >> ti.uid;
-            tcp_items.push_back(ti);
+            if (ti.remote_port_ == cp && ti.local_port_ == sp) {
+                if (memcmp(&ti.remote_address_, &ca, sizeof (struct in6_addr)))
+                    continue;
+                if (memcmp(&ti.local_address_, &sa, sizeof (struct in6_addr)))
+                    continue;
+                tcp_items.push_back(ti);
+            }
 #if 0
             std::cout << "local: " << la6.str() << "\n";
             std::cout << "lport: " << ti.local_port_ << "\n";
