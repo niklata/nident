@@ -155,7 +155,7 @@ void tiger_compress(uint64_t *str, uint64_t state[3])
   tiger_compress_macro(((uint64_t*)str), ((uint64_t*)state))
 #endif
 
-void tiger(uint64_t *str, uint64_t length, uint64_t res[3])
+void tiger(const uint64_t *str, const uint64_t length, uint64_t res[3])
 {
   register uint64_t i, j;
   union {

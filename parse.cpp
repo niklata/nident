@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 03:51:39 nk>
+ * Time-stamp: <2010-11-06 05:40:47 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -34,6 +34,9 @@
 #include <fstream>
 #include <sstream>
 #include <boost/regex.hpp>
+#include <stdint.h>
+
+#include "tiger.h"
 
 extern bool gParanoid;
 
@@ -498,7 +501,7 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
             continue;
         if (c->high_rport != -1 && cp > c->high_rport)
             continue;
-        std::cout << "*";
+        std::cout << "*\n";
         if (!compare_ipv6(ca, c->host, c->mask == -1 ? 0 : c->mask))
             continue;
         // Found our match.
@@ -546,13 +549,27 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
                 ss << c->policy.spoof;
             } else if (c->policy.action == PolicyHash) {
                 std::cout << "action: PolicyHash\n";
-                // XXX NYI, bool policy->is*()
-                // fHashNone = 0,
-                //     fHashUID = 1,
-                //     fHashIP = 2,
-                //     fHashSP = 4,
-                //     fHashDP = 8
-                ss << "USERID:UNIX:hash-NYI";
+                std::stringstream sh;
+                std::string hashstr;
+                if (c->policy.isHashUID())
+                    sh << uid;
+                if (c->policy.isHashIP()) {
+                    char buf[32];
+                    if (inet_ntop(AF_INET6, &ca, buf, sizeof buf))
+                        sh << buf;
+                    else
+                        std::cerr << "inet_ntop(): failed for hash ip";
+                }
+                if (c->policy.isHashSP())
+                    sh << sp;
+                if (c->policy.isHashDP())
+                    sh << cp;
+                sh >> hashstr;
+                uint64_t result[3];
+                tiger(reinterpret_cast<const uint64_t *>(hashstr.c_str()),
+                      hashstr.size(), result);
+                std::string res = compress_64_to_unix(result[1]);
+                ss << "USERID:UNIX:" << res;
             }
             break;
         }
@@ -563,6 +580,40 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
         else
             ss << "ERROR:NO-USER";
     }
+    ss >> ret;
+    return ret;
+}
+
+// Please note that compressing the 64-bit value will greatly lessen its
+// entropy: the method I use will result in something with fewer than 48-bits
+// of entropy, with the 'slightly' owing to numbers 0-6 being 25% more likely
+// to occur than other alphanumerics and the alphanumeric mapping encoding
+// slightly less than 6 bits of each byte.  However, as ident's responses
+// should never be trusted, the security provided should be more than
+// sufficient.  This approach saves more entropy than merely converting 32-bits
+// of the qword to hex.
+std::string Parse::compress_64_to_unix(uint64_t qword)
+{
+    std::stringstream ss;
+    std::string ret;
+    union {
+        unsigned char c[8];
+        uint64_t i;
+    } b;
+    char buf[9];
+    buf[8] = '\0';
+    b.i = qword;
+    for (int i = 0; i < 8; ++i) {
+        b.c[i] = b.c[i] % 62;
+        b.c[i] += 48;
+        if (b.c[i] > 57) {
+            b.c[i] += 7;
+            if (b.c[i] > 90)
+                b.c[i] += 6;
+        }
+        buf[i] = static_cast<char>(b.c[i]);
+    }
+    ss << buf;
     ss >> ret;
     return ret;
 }

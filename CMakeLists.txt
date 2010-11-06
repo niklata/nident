@@ -13,6 +13,8 @@ link_directories ( ${Boost_LIBRARY_DIRS} )
 include_directories ( ${Boost_INCLUDE_DIRS} )
 
 set(NIDENT_SRCS
+  tiger.c
+  sboxes.c
   parse.cpp
   identclient.cpp
   epoll.cpp
@@ -21,5 +23,3 @@ set(NIDENT_SRCS
 
 add_executable(nident ${NIDENT_SRCS})
 target_link_libraries(nident ${Boost_REGEX_LIBRARY} ncmlib)
-
-add_executable(tiger tiger.c sboxes.c testtiger.c)
