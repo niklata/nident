@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-06 08:51:35 nk>
+ * Time-stamp: <2010-11-06 09:05:35 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -191,21 +191,18 @@ bool IdentClient::parse_request()
 }
 
 bool IdentClient::decipher_addr(const struct sockaddr_storage &addr,
-                                struct in6_addr *addy, std::string *addyp,
-                                const char *pstr)
+                                struct in6_addr *addy, std::string *addyp)
 {
     if (addr.ss_family == AF_INET) {
         char hoststr[32];
         struct sockaddr_in *s = (struct sockaddr_in *)&addr;
         int r;
-        int port = ntohs(s->sin_port);
         if (!inet_ntop(AF_INET, &s->sin_addr, hoststr, sizeof hoststr)) {
             log_line("inet_ntop (ipv4): %s", strerror(errno));
             return false;
         }
         if (addyp)
             *addyp = hoststr;
-        std::cout << pstr << " host: [" << hoststr << "]:" << port << "\n";
         std::string hoststr6;
         hoststr6 += "::ffff:";
         hoststr6 += hoststr;
@@ -221,14 +218,12 @@ bool IdentClient::decipher_addr(const struct sockaddr_storage &addr,
         char hoststr[32];
         struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
         int r;
-        int port = ntohs(s->sin6_port);
         if (!inet_ntop(AF_INET6, &s->sin6_addr, hoststr, sizeof hoststr)) {
             log_line("inet_ntop (ipv6): %s", strerror(errno));
             return false;
         }
         if (addyp)
             *addyp = hoststr;
-        std::cout << pstr << " host: [" << hoststr << "]:" << port << "\n";
         r = inet_pton(AF_INET6, hoststr, addy);
         if (r == 0) {
             log_line("inet_pton (ipv6): invalid address");
@@ -253,7 +248,7 @@ bool IdentClient::get_local_info()
         log_line("getsockname() error %s", strerror(errno));
         return false;
     }
-    if (decipher_addr(addr, &server_address_, NULL, "local"))
+    if (decipher_addr(addr, &server_address_, NULL))
         return true;
     else
         return false;
@@ -268,8 +263,7 @@ bool IdentClient::get_peer_info()
         log_line("getpeername() error %s", strerror(errno));
         return false;
     }
-    if (decipher_addr(addr, &client_address_,
-                      &client_address_pretty_, "remote"))
+    if (decipher_addr(addr, &client_address_, &client_address_pretty_))
         return true;
     else
         return false;

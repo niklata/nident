@@ -1,5 +1,5 @@
 /* identclient.hpp - ident client request handling
- * Time-stamp: <2010-11-06 08:48:31 nk>
+ * Time-stamp: <2010-11-06 09:05:13 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -65,8 +65,7 @@ public:
     bool process_output();
 private:
     bool decipher_addr(const struct sockaddr_storage &addr,
-                       struct in6_addr *addy, std::string *addyp,
-                       const char *pstr);
+                       struct in6_addr *addy, std::string *addyp);
 };
 
 extern unsigned int max_client_bytes;

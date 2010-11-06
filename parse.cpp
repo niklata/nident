@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 08:34:10 nk>
+ * Time-stamp: <2010-11-06 09:02:17 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -87,7 +87,6 @@ void Parse::parse_tcp(const std::string &fn)
     while (1) {
         std::getline(f, l);
         if (f.eof()) {
-            std::cerr << "end of tcp connections\n";
             break;
         } else if (f.bad()) {
             std::cerr << "fatal io error fetching line of proc/net/tcp\n";
@@ -132,7 +131,7 @@ void Parse::parse_tcp(const std::string &fn)
             us << m[13];
             us >> ti.uid;
             tcp_items.push_back(ti);
-
+#if 0
             std::cout << "local: " << "0000:0000:0000:0000:0000:ffff:"
                       << a << "." << b << "." << c << "." << d << "\n";
             std::cout << "lport: " << ti.local_port_ << "\n";
@@ -140,6 +139,7 @@ void Parse::parse_tcp(const std::string &fn)
                       << e << "." << f << "." << g << "." << h << "\n";
             std::cout << "rport: " << ti.remote_port_ << "\n";
             std::cout << "uid: " << m[13] << "\n";
+#endif
         }
     }
     f.close();
@@ -205,7 +205,6 @@ void Parse::parse_tcp6(const std::string &fn)
     while (1) {
         std::getline(f, l);
         if (f.eof()) {
-            std::cerr << "end of tcp connections\n";
             break;
         } else if (f.bad()) {
             std::cerr << "fatal io error fetching line of proc/net/tcp\n";
@@ -236,12 +235,13 @@ void Parse::parse_tcp6(const std::string &fn)
             us << m[37];
             us >> ti.uid;
             tcp_items.push_back(ti);
-
+#if 0
             std::cout << "local: " << la6.str() << "\n";
             std::cout << "lport: " << ti.local_port_ << "\n";
             std::cout << "rmote: " << ra6.str() << "\n";
             std::cout << "rport: " << ti.remote_port_ << "\n";
             std::cout << "uid: " << ti.uid << "\n";
+#endif
         }
     }
     f.close();
@@ -285,9 +285,7 @@ void Parse::parse_cfg(const std::string &fn)
 
     while (1) {
         std::getline(f, l);
-        std::cout << "\n" << l << "\n";
         if (f.eof()) {
-            std::cerr << "end of tcp connections\n";
             break;
         } else if (f.bad()) {
             std::cerr << "fatal io error fetching line of proc/net/tcp\n";
@@ -351,6 +349,7 @@ void Parse::parse_cfg(const std::string &fn)
                 continue; // invalid
             cfg_items.push_back(ci);
 
+#if 0
             if (ci.type == HostIP6)
                 std::cout << "ipv6: " << hoststr << "\n";
             else if (ci.type == HostIP4)
@@ -383,9 +382,9 @@ void Parse::parse_cfg(const std::string &fn)
                 std::cout << "\n";
             } else
                 continue; // invalid
+#endif
         }
     }
-    std::cout << "end of config\n";
     f.close();
 }
 
@@ -409,7 +408,6 @@ struct in6_addr Parse::canon_ipv6(const std::string &ip, bool *ok)
         *ok = true;
     unsigned int *idx;
     idx = reinterpret_cast<unsigned int *>(&ret);
-    std::cout << "ip raw :" << idx[3] << " " << idx[2] << " " << idx[1] << " " << idx[0] << "\n";
     return ret;
 }
 
@@ -434,15 +432,16 @@ bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
 #endif
     char buf[32];
     inet_ntop(AF_INET6, &ip, buf, sizeof buf);
-    std::cout << "cmp ip: " << buf << "\n";
     inet_ntop(AF_INET6, &mask, buf, sizeof buf);
+    int incl_qwords = msize / 64;
+    int incl_bits = msize % 64;
+#if 0
+    std::cout << "cmp ip: " << buf << "\n";
     std::cout << "cmpmsk: " << buf << " bits: " << msize << "\n";
     std::cout << "\na: " << a << " b: " << b << "\n";
     std::cout << "ma: " << ma << " mb: " << mb << "\n";
-
-    int incl_qwords = msize / 64;
-    int incl_bits = msize % 64;
     std::cout << "incl_qwords = " << incl_qwords << " incl_bits = " << incl_bits << "\n";
+#endif
     if (incl_qwords == 0 && incl_bits == 0) { // wildcard mask
         return true;
     } else if (ma == 0 && mb == 0) { // wildcard
@@ -476,7 +475,6 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
     int uid;
     std::vector<ConfigItem>::iterator c;
     for (c = cfg_items.begin(); c != cfg_items.end(); ++c) {
-        std::cout << ".";
         if (c->low_lport != -1 && sp < c->low_lport)
             continue;
         if (c->high_lport != -1 && sp > c->high_lport)
@@ -485,15 +483,12 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
             continue;
         if (c->high_rport != -1 && cp > c->high_rport)
             continue;
-        std::cout << "*\n";
         if (!compare_ipv6(ca, c->host, c->mask == -1 ? 0 : c->mask))
             continue;
         // Found our match.
-        std::cout << "cmatch = true\n";
         cmatched = true;
         break;
     }
-    std::cout << "\n";
     if (cmatched) {
         std::vector<ProcTcpItem>::iterator t;
         for (t = tcp_items.begin(); t != tcp_items.end(); ++t) {
