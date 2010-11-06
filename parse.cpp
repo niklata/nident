@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 01:24:52 nk>
+ * Time-stamp: <2010-11-06 02:14:52 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -107,7 +107,7 @@ void Parse::parse_tcp(const std::string &fn)
             la6 << "0000:0000:0000:0000:0000:ffff:"
                 << a << "." << b << "." << c << "." << d;
             ti.local_address_ = canon_ipv6(la6.str());
-            ls << std::hex << m[6] << m[5];
+            ls << std::hex << m[5] << m[6];
             ls >> ti.local_port_;
             es << std::hex << m[10];
             es >> e;
@@ -120,7 +120,7 @@ void Parse::parse_tcp(const std::string &fn)
             ra6 << "0000:0000:0000:0000:0000:ffff:"
                 << e << "." << f << "." << g << "." << h;
             ti.remote_address_ = canon_ipv6(ra6.str());
-            rs << std::hex << m[12] << m[11];
+            rs << std::hex << m[11] << m[12];
             rs >> ti.remote_port_;
             us << m[13];
             us >> ti.uid;
@@ -217,14 +217,14 @@ void Parse::parse_tcp6(const std::string &fn)
                 << m[12] << m[11] << ":" << m[10] << m[9] << ":"
                 << m[16] << m[15] << ":" << m[14] << m[13];
             ti.local_address_ = canon_ipv6(la6.str());
-            ls << std::hex << m[18] << m[17];
+            ls << std::hex << m[17] << m[18];
             ls >> ti.local_port_;
             ra6 << m[22] << m[21] << ":" << m[20] << m[19] << ":"
                 << m[26] << m[25] << ":" << m[24] << m[23] << ":"
                 << m[30] << m[29] << ":" << m[28] << m[27] << ":"
                 << m[34] << m[33] << ":" << m[32] << m[31];
             ti.remote_address_ = canon_ipv6(ra6.str());
-            rs << std::hex << m[36] << m[35];
+            rs << std::hex << m[35] << m[36];
             rs >> ti.remote_port_;
             us << m[37];
             us >> ti.uid;
@@ -308,6 +308,7 @@ void Parse::parse_cfg(const std::string &fn)
                 ci.host = canon_ipv6(tmpstr);
             } else if (boost::regex_match(hoststr.c_str(), n, rehost)) {
                 ci.type = HostName;
+                // XXX support hostnames in config file
                 std::cerr << "support for hostnames NYI\n";
                 ci.host = canon_ipv6("::1");
             } else
@@ -399,6 +400,9 @@ struct in6_addr Parse::canon_ipv6(const std::string &ip, bool *ok)
     }
     if (ok)
         *ok = true;
+    unsigned int *idx;
+    idx = reinterpret_cast<unsigned int *>(&ret);
+    std::cout << "ip raw :" << idx[3] << " " << idx[2] << " " << idx[1] << " " << idx[0] << "\n";
     return ret;
 }
 
@@ -418,9 +422,20 @@ bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
     unsigned int mb = idxm[2];
     unsigned int ma = idxm[3];
 
+    char buf[32];
+    inet_ntop(AF_INET6, &ip, buf, sizeof buf);
+    std::cout << "cmp ip: " << buf << "\n";
+    inet_ntop(AF_INET6, &mask, buf, sizeof buf);
+    std::cout << "cmpmsk: " << buf << " bits: " << msize << "\n";
+    std::cout << "\na: " << a << " b: " << b << " c: " << c << " d: " << d << "\n";
+    std::cout << "ma: " << ma << " mb: " << mb << " mc: " << mc << " md: " << md << "\n";
+
     int incl_dwords = msize / 32;
     int incl_bits = msize % 32;
+    std::cout << "incl_dwords = " << incl_dwords << " incl_bits = " << incl_bits << "\n";
     if (incl_dwords == 0 && incl_bits == 0) { // wildcard mask
+        return true;
+    } else if (ma == 0 && mb == 0 && mc == 0 && md == 0) { // wildcard
         return true;
     } else if (incl_dwords == 0 && incl_bits) {
         for (int i = 32 - incl_bits; i > 0; --i) {
@@ -463,8 +478,7 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
     int uid;
     std::vector<ConfigItem>::iterator c;
     for (c = cfg_items.begin(); c != cfg_items.end(); ++c) {
-        if (!compare_ipv6(ca, c->host, c->mask == -1 ? 128 : c->mask))
-            continue;
+        std::cout << ".";
         if (c->low_lport != -1 && sp < c->low_lport)
             continue;
         if (c->high_lport != -1 && sp > c->high_lport)
@@ -473,21 +487,31 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
             continue;
         if (c->high_rport != -1 && cp > c->high_rport)
             continue;
+        std::cout << "*";
+        if (!compare_ipv6(ca, c->host, c->mask == -1 ? 0 : c->mask))
+            continue;
         // Found our match.
+        std::cout << "cmatch = true\n";
         cmatched = true;
         break;
     }
+    std::cout << "\n";
     if (cmatched) {
         std::vector<ProcTcpItem>::iterator t;
         for (t = tcp_items.begin(); t != tcp_items.end(); ++t) {
+            std::cout << "rp: " << t->remote_port_ << " cp: " << cp << "\n";
             if (t->remote_port_ != cp)
                 continue;
+            std::cout << "1";
             if (t->local_port_ != sp)
                 continue;
+            std::cout << "2";
             if (memcmp(&t->remote_address_, &ca, sizeof (struct in6_addr)))
                 continue;
+            std::cout << "3";
             if (memcmp(&t->local_address_, &sa, sizeof (struct in6_addr)))
                 continue;
+            std::cout << "4";
             uid = t->uid;
             if (c->policy.action == PolicyNone) {
                 std::cout << "action: PolicyNone\n";
