@@ -1,4 +1,5 @@
-/* This file is derived from the reference implementation of the Tiger
+/*
+ * This file is derived from the reference implementation of the Tiger
  * cryptographic hash, available at:
  * http://www.cs.technion.ac.il/~biham/Reports/Tiger/
  *
@@ -157,7 +158,10 @@ void tiger_compress(uint64_t *str, uint64_t state[3])
 void tiger(uint64_t *str, uint64_t length, uint64_t res[3])
 {
   register uint64_t i, j;
-  unsigned char temp[64];
+  union {
+    unsigned char bytes[64];
+    uint64_t value;
+  } temp;
 
   res[0]=0x0123456789ABCDEFLL;
   res[1]=0xFEDCBA9876543210LL;
@@ -167,8 +171,8 @@ void tiger(uint64_t *str, uint64_t length, uint64_t res[3])
     {
 #ifdef __BIG_ENDIAN__
       for(j=0; j<64; j++)
-	temp[j^7] = ((uint8_t*)str)[j];
-      tiger_compress(((uint64_t*)temp), res);
+	temp.bytes[j^7] = ((uint8_t*)str)[j];
+      tiger_compress(&temp.value, res);
 #else
       tiger_compress(str, res);
 #endif
@@ -177,30 +181,30 @@ void tiger(uint64_t *str, uint64_t length, uint64_t res[3])
 
 #ifdef __BIG_ENDIAN__
   for(j=0; j<i; j++)
-    temp[j^7] = ((uint8_t*)str)[j];
+    temp.bytes[j^7] = ((uint8_t*)str)[j];
 
-  temp[j^7] = 0x01;
+  temp.bytes[j^7] = 0x01;
   j++;
   for(; j&7; j++)
-    temp[j^7] = 0;
+    temp.bytes[j^7] = 0;
 #else
   for(j=0; j<i; j++)
-    temp[j] = ((uint8_t*)str)[j];
+    temp.bytes[j] = ((uint8_t*)str)[j];
 
-  temp[j++] = 0x01;
+  temp.bytes[j++] = 0x01;
   for(; j&7; j++)
-    temp[j] = 0;
+    temp.bytes[j] = 0;
 #endif
   if(j>56)
     {
       for(; j<64; j++)
-        temp[j] = 0;
-      tiger_compress(((uint64_t*)temp), res);
+        temp.bytes[j] = 0;
+      tiger_compress(&temp.value, res);
       j=0;
     }
 
   for(; j<56; j++)
-    temp[j] = 0;
-  ((uint64_t*)(&(temp[56])))[0] = ((uint64_t)length)<<3;
-  tiger_compress(((uint64_t*)temp), res);
+    temp.bytes[j] = 0;
+  ((uint64_t*)(&(temp.bytes[56])))[0] = ((uint64_t)length)<<3;
+  tiger_compress(&temp.value, res);
 }
