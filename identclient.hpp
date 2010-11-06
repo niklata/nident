@@ -1,5 +1,5 @@
 /* identclient.hpp - ident client request handling
- * Time-stamp: <2010-11-06 09:05:13 nk>
+ * Time-stamp: <2010-11-06 18:08:25 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -41,13 +41,20 @@ public:
         STATE_WAITOUT,
         STATE_DONE
     };
+    enum HostType {
+        HostNone,
+        HostIP4,
+        HostIP6
+    };
 
     const int fd_;
     std::string inbuf_;
     std::string outbuf_;
     IdentClientState state_;
 
+    HostType server_type_;
     struct in6_addr server_address_;
+    HostType client_type_;
     struct in6_addr client_address_;
     std::string client_address_pretty_;
 
@@ -65,7 +72,8 @@ public:
     bool process_output();
 private:
     bool decipher_addr(const struct sockaddr_storage &addr,
-                       struct in6_addr *addy, std::string *addyp);
+                       struct in6_addr *addy, HostType *htype,
+                       std::string *addyp = NULL);
 };
 
 extern unsigned int max_client_bytes;

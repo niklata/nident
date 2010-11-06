@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-06 09:05:35 nk>
+ * Time-stamp: <2010-11-06 19:00:15 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -45,6 +45,8 @@ unsigned int max_client_bytes = 128;
 
 IdentClient::IdentClient(int fd) : fd_(fd) {
     state_ = STATE_WAITIN;
+    server_type_ = HostNone;
+    client_type_ = HostNone;
     server_port_ = -1;
     client_port_ = -1;
 }
@@ -191,12 +193,15 @@ bool IdentClient::parse_request()
 }
 
 bool IdentClient::decipher_addr(const struct sockaddr_storage &addr,
-                                struct in6_addr *addy, std::string *addyp)
+                                struct in6_addr *addy, HostType *htype,
+                                std::string *addyp)
 {
     if (addr.ss_family == AF_INET) {
         char hoststr[32];
         struct sockaddr_in *s = (struct sockaddr_in *)&addr;
         int r;
+        if (htype)
+            *htype = HostIP4;
         if (!inet_ntop(AF_INET, &s->sin_addr, hoststr, sizeof hoststr)) {
             log_line("inet_ntop (ipv4): %s", strerror(errno));
             return false;
@@ -218,6 +223,8 @@ bool IdentClient::decipher_addr(const struct sockaddr_storage &addr,
         char hoststr[32];
         struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
         int r;
+        if (htype)
+            *htype = HostIP6;
         if (!inet_ntop(AF_INET6, &s->sin6_addr, hoststr, sizeof hoststr)) {
             log_line("inet_ntop (ipv6): %s", strerror(errno));
             return false;
@@ -248,7 +255,7 @@ bool IdentClient::get_local_info()
         log_line("getsockname() error %s", strerror(errno));
         return false;
     }
-    if (decipher_addr(addr, &server_address_, NULL))
+    if (decipher_addr(addr, &server_address_, &server_type_))
         return true;
     else
         return false;
@@ -263,7 +270,8 @@ bool IdentClient::get_peer_info()
         log_line("getpeername() error %s", strerror(errno));
         return false;
     }
-    if (decipher_addr(addr, &client_address_, &client_address_pretty_))
+    if (decipher_addr(addr, &client_address_, &client_type_,
+                      &client_address_pretty_))
         return true;
     else
         return false;
@@ -278,15 +286,22 @@ bool IdentClient::create_reply()
         return false;
     }
 
-    Parse pa;
-    pa.parse_tcp("/proc/net/tcp");
-    pa.parse_tcp6("/proc/net/tcp6");
-    pa.parse_cfg("/home/njk/.ident");
-
     if (!get_local_info())
         return false;
     if (!get_peer_info())
         return false;
+
+    if (client_type_ == HostNone || server_type_ == HostNone)
+        return false;
+    if (client_type_ != server_type_)
+        return false;
+
+    Parse pa;
+    if (client_type_ == HostIP4)
+        pa.parse_tcp("/proc/net/tcp");
+    if (client_type_ == HostIP6)
+        pa.parse_tcp6("/proc/net/tcp6");
+    pa.parse_cfg("/home/njk/.ident"); // XXX:
 
     std::string reply = pa.get_response(server_address_, server_port_,
                                         client_address_, client_port_);
