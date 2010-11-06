@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-05 18:41:45 nk>
+ * Time-stamp: <2010-11-05 23:14:39 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -45,8 +45,10 @@ unsigned int max_client_bytes = 128;
 
 IdentClient::IdentClient(int fd) : fd_(fd) {
     state_ = STATE_WAITIN;
-    server_port_ = 0;
-    client_port_ = 0;
+    server_port_ = -1;
+    client_port_ = -1;
+    server_port_ = -1;
+    client_port_ = -1;
     response_ = "ERROR";
     add_info_ = "NO-USER";
 }
@@ -203,6 +205,116 @@ bool IdentClient::parse_request()
     return false;
 }
 
+// Returns true if sock IP and port are found, else false.
+bool IdentClient::get_local_info()
+{
+    struct sockaddr_storage addr;
+    socklen_t len = sizeof addr;
+    if (getsockname(fd_, (struct sockaddr *)&addr, &len)) {
+        log_line("getsockname() error %s", strerror(errno));
+        return false;
+    }
+    if (addr.ss_family == AF_INET) {
+        char hoststr[32];
+        struct sockaddr_in *s = (struct sockaddr_in *)&addr;
+        int r;
+        int port = ntohs(s->sin_port);
+        if (!inet_ntop(AF_INET, &s->sin_addr, hoststr, sizeof hoststr)) {
+            log_line("inet_ntop (ipv4): %s", strerror(errno));
+            return false;
+        }
+        std::cout << "local host: [" << hoststr << "]:" << port << "\n";
+        std::string hoststr6;
+        hoststr6 += "::ffff:";
+        hoststr6 += hoststr;
+        r = inet_pton(AF_INET6, hoststr6.c_str(), &server_address_);
+        if (r == 0) {
+            log_line("inet_pton (ipv4): sock does not have a valid address");
+            return false;
+        } else if (r < 0) {
+            log_line("inet_pton (ipv4): %s", strerror(errno));
+            return false;
+        }
+    } else if (addr.ss_family == AF_INET6) {
+        char hoststr[32];
+        struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
+        int r;
+        int port = ntohs(s->sin6_port);
+        if (!inet_ntop(AF_INET6, &s->sin6_addr, hoststr, sizeof hoststr)) {
+            log_line("inet_ntop (ipv6): %s", strerror(errno));
+            return false;
+        }
+        std::cout << "local host: [" << hoststr << "]:" << port << "\n";
+        r = inet_pton(AF_INET6, hoststr, &server_address_);
+        if (r == 0) {
+            log_line("inet_pton (ipv6): sock does not have a valid address");
+            return false;
+        } else if (r < 0) {
+            log_line("inet_pton (ipv6): %s", strerror(errno));
+            return false;
+        }
+    } else {
+        log_line("getsockname(): returned unknown ss_family");
+        return false;
+    }
+    return true;
+}
+
+// Returns true if peer IP and port are found, else false.
+bool IdentClient::get_peer_info()
+{
+    struct sockaddr_storage addr;
+    socklen_t len = sizeof addr;
+    if (getpeername(fd_, (struct sockaddr *)&addr, &len)) {
+        log_line("getpeername() error %s", strerror(errno));
+        return false;
+    }
+    if (addr.ss_family == AF_INET) {
+        char hoststr[32];
+        struct sockaddr_in *s = (struct sockaddr_in *)&addr;
+        int r;
+        int port = ntohs(s->sin_port);
+        if (!inet_ntop(AF_INET, &s->sin_addr, hoststr, sizeof hoststr)) {
+            log_line("inet_ntop (ipv4): %s", strerror(errno));
+            return false;
+        }
+        std::cout << "remote host: [" << hoststr << "]:" << port << "\n";
+        std::string hoststr6;
+        hoststr6 += "::ffff:";
+        hoststr6 += hoststr;
+        r = inet_pton(AF_INET6, hoststr6.c_str(), &client_address_);
+        if (r == 0) {
+            log_line("inet_pton (ipv4): peer does not have a valid address");
+            return false;
+        } else if (r < 0) {
+            log_line("inet_pton (ipv4): %s", strerror(errno));
+            return false;
+        }
+    } else if (addr.ss_family == AF_INET6) {
+        char hoststr[32];
+        struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
+        int r;
+        int port = ntohs(s->sin6_port);
+        if (!inet_ntop(AF_INET6, &s->sin6_addr, hoststr, sizeof hoststr)) {
+            log_line("inet_ntop (ipv6): %s", strerror(errno));
+            return false;
+        }
+        std::cout << "remote host: [" << hoststr << "]:" << port << "\n";
+        r = inet_pton(AF_INET6, hoststr, &client_address_);
+        if (r == 0) {
+            log_line("inet_pton (ipv6): peer does not have a valid address");
+            return false;
+        } else if (r < 0) {
+            log_line("inet_pton (ipv6): %s", strerror(errno));
+            return false;
+        }
+    } else {
+        log_line("getpeername(): returned unknown ss_family");
+        return false;
+    }
+    return true;
+}
+
 // Forms a reply and schedules a write.
 // State can change: STATE_GOTIN -> STATE_WAITOUT
 bool IdentClient::create_reply()
@@ -219,59 +331,12 @@ bool IdentClient::create_reply()
     pp.parse_tcp6("/proc/net/tcp6");
     pp.parse_cfg("/home/njk/.ident");
 
-    int port = -1;
-    struct in6_addr remote_address;
+    if (!get_local_info())
+        return false;
+    if (!get_peer_info())
+        return false;
 
-    // getpeername
-    struct sockaddr_storage addr;
-    socklen_t len = sizeof addr;
-    if (getpeername(fd_, (struct sockaddr *)&addr, &len)) {
-        log_line("getpeername() error %s", strerror(errno));
-        return false;
-    }
-    if (addr.ss_family == AF_INET) {
-        char hoststr[32];
-        struct sockaddr_in *s = (struct sockaddr_in *)&addr;
-        int r;
-        port = ntohs(s->sin_port);
-        if (!inet_ntop(AF_INET, &s->sin_addr, hoststr, sizeof hoststr)) {
-            log_line("inet_ntop (ipv4): %s", strerror(errno));
-            return false;
-        }
-        std::cout << "remote host: [" << hoststr << "]:" << port << "\n";
-        std::string hoststr6;
-        hoststr6 += "::ffff:";
-        hoststr6 += hoststr;
-        r = inet_pton(AF_INET6, hoststr6.c_str(), &remote_address);
-        if (r == 0) {
-            log_line("inet_pton (ipv4): peer does not have a valid address");
-            return false;
-        } else if (r < 0) {
-            log_line("inet_pton (ipv4): %s", strerror(errno));
-            return false;
-        }
-    } else if (addr.ss_family == AF_INET6) {
-        char hoststr[32];
-        struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
-        int r;
-        port = ntohs(s->sin6_port);
-        if (!inet_ntop(AF_INET6, &s->sin6_addr, hoststr, sizeof hoststr)) {
-            log_line("inet_ntop (ipv6): %s", strerror(errno));
-            return false;
-        }
-        std::cout << "remote host: [" << hoststr << "]:" << port << "\n";
-        r = inet_pton(AF_INET6, hoststr, &remote_address);
-        if (r == 0) {
-            log_line("inet_pton (ipv6): peer does not have a valid address");
-            return false;
-        } else if (r < 0) {
-            log_line("inet_pton (ipv6): %s", strerror(errno));
-            return false;
-        }
-    } else {
-        log_line("getpeername(): returned unknown ss_family");
-        return false;
-    }
+    // XXX: extend config format to mask by local address?
 
     std::stringstream ss;
     ss << server_port_ << "," << client_port_ << ":"

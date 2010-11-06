@@ -1,5 +1,5 @@
 /* identclient.hpp - ident client request handling
- * Time-stamp: <2010-11-03 13:10:35 nk>
+ * Time-stamp: <2010-11-05 23:14:48 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -31,6 +31,7 @@
 #define NK_IDENTCLIENT_H
 
 #include <string>
+#include <netdb.h>
 
 class IdentClient {
 public:
@@ -46,6 +47,9 @@ public:
     std::string outbuf_;
     IdentClientState state_;
 
+    struct in6_addr server_address_;
+    struct in6_addr client_address_;
+
     int server_port_; // Port on the local machine this server is running on.
     int client_port_; // Port on the remote machine making the ident request.
     std::string response_;
@@ -57,6 +61,8 @@ public:
     bool process_input();
     bool parse_request();
     bool create_reply();
+    bool get_local_info();
+    bool get_peer_info();
     bool process_output();
 };
 
