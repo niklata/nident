@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 07:27:06 nk>
+ * Time-stamp: <2010-11-06 08:08:09 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -412,70 +412,50 @@ struct in6_addr Parse::canon_ipv6(const std::string &ip, bool *ok)
 bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
                          int msize)
 {
-    unsigned int *idx, *idxm;
-    idx = reinterpret_cast<unsigned int *>(&ip);
-    idxm = reinterpret_cast<unsigned int *>(&mask);
+    uint64_t *idx, *idxm;
+    idx = reinterpret_cast<uint64_t *>(&ip);
+    idxm = reinterpret_cast<uint64_t *>(&mask);
 
     // these are stored in host byte order, not network byte order
 #ifndef __BIG_ENDIAN__
-    unsigned int d = idx[0];
-    unsigned int c = idx[1];
-    unsigned int b = idx[2];
-    unsigned int a = idx[3];
-    unsigned int md = idxm[0];
-    unsigned int mc = idxm[1];
-    unsigned int mb = idxm[2];
-    unsigned int ma = idxm[3];
+    uint64_t b = idx[0];
+    uint64_t a = idx[1];
+    uint64_t mb = idxm[0];
+    uint64_t ma = idxm[1];
 #else
-    unsigned int a = idx[0];
-    unsigned int b = idx[1];
-    unsigned int c = idx[2];
-    unsigned int d = idx[3];
-    unsigned int ma = idxm[0];
-    unsigned int mb = idxm[1];
-    unsigned int mc = idxm[2];
-    unsigned int md = idxm[3];
+    uint64_t a = idx[0];
+    uint64_t b = idx[1];
+    uint64_t ma = idxm[0];
+    uint64_t mb = idxm[1];
 #endif
     char buf[32];
     inet_ntop(AF_INET6, &ip, buf, sizeof buf);
     std::cout << "cmp ip: " << buf << "\n";
     inet_ntop(AF_INET6, &mask, buf, sizeof buf);
     std::cout << "cmpmsk: " << buf << " bits: " << msize << "\n";
-    std::cout << "\na: " << a << " b: " << b << " c: " << c << " d: " << d << "\n";
-    std::cout << "ma: " << ma << " mb: " << mb << " mc: " << mc << " md: " << md << "\n";
+    std::cout << "\na: " << a << " b: " << b << "\n";
+    std::cout << "ma: " << ma << " mb: " << mb << "\n";
 
-    int incl_dwords = msize / 32;
-    int incl_bits = msize % 32;
-    std::cout << "incl_dwords = " << incl_dwords << " incl_bits = " << incl_bits << "\n";
-    if (incl_dwords == 0 && incl_bits == 0) { // wildcard mask
+    int incl_qwords = msize / 64;
+    int incl_bits = msize % 64;
+    std::cout << "incl_qwords = " << incl_qwords << " incl_bits = " << incl_bits << "\n";
+    if (incl_qwords == 0 && incl_bits == 0) { // wildcard mask
         return true;
-    } else if (ma == 0 && mb == 0 && mc == 0 && md == 0) { // wildcard
+    } else if (ma == 0 && mb == 0) { // wildcard
         return true;
-    } else if (incl_dwords == 0 && incl_bits) {
-        for (int i = 31 - incl_bits; i >= 0; --i) {
+    } else if (incl_qwords == 0 && incl_bits) {
+        for (int i = 63 - incl_bits; i >= 0; --i) {
             a |= 1 << i;
             ma |= 1 << i;
         }
-        b = mb; c = mc; d = md;
-    } else if (incl_dwords == 1 && incl_bits) {
-        for (int i = 31 - incl_bits; i >= 0; --i) {
+        b = mb;
+    } else if (incl_qwords == 1 && incl_bits) {
+        for (int i = 63 - incl_bits; i >= 0; --i) {
             b |= 1 << i;
             mb |= 1 << i;
         }
-        c = mc; d = md;
-    } else if (incl_dwords == 2 && incl_bits) {
-        for (int i = 31 - incl_bits; i >= 0; --i) {
-            c |= 1 << i;
-            mc |= 1 << i;
-        }
-        d = md;
-    } else if (incl_dwords == 3 && incl_bits) {
-        for (int i = 31 - incl_bits; i >= 0; --i) {
-            d |= 1 << i;
-            md |= 1 << i;
-        }
     }
-    if (a == ma && b == mb && c == mc && d == md)
+    if (a == ma && b == mb)
         return true;
     else
         return false;
