@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 08:08:09 nk>
+ * Time-stamp: <2010-11-06 08:34:10 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -35,8 +35,12 @@
 #include <sstream>
 #include <boost/regex.hpp>
 #include <stdint.h>
+#include <pwd.h>
 
 #include "tiger.h"
+extern "C" {
+#include "log.h"
+}
 
 extern bool gParanoid;
 
@@ -516,8 +520,18 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
                 else
                     ss << "ERROR:HIDDEN-USER";
             } else if (c->policy.action == PolicySpoof) {
-                ss << "USERID:UNIX:";
-                ss << c->policy.spoof;
+                if (!getpwnam(c->policy.spoof.c_str())) {
+                    ss << "USERID:UNIX:";
+                    ss << c->policy.spoof;
+                } else {
+                    // A username exists with the spoof name.
+                    log_line("Spoof requested for extant user %s",
+                             c->policy.spoof.c_str());
+                    if (gParanoid)
+                        ss << "ERROR:UNKNOWN-ERROR";
+                    else
+                        ss << "ERROR:HIDDEN-USER";
+                }
             } else if (c->policy.action == PolicyHash) {
                 std::stringstream sh;
                 std::string hashstr;
