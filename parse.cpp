@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 02:14:52 nk>
+ * Time-stamp: <2010-11-06 03:39:45 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -438,25 +438,25 @@ bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
     } else if (ma == 0 && mb == 0 && mc == 0 && md == 0) { // wildcard
         return true;
     } else if (incl_dwords == 0 && incl_bits) {
-        for (int i = 32 - incl_bits; i > 0; --i) {
+        for (int i = 31 - incl_bits; i >= 0; --i) {
             a |= 1 << i;
             ma |= 1 << i;
         }
         b = mb; c = mc; d = md;
     } else if (incl_dwords == 1 && incl_bits) {
-        for (int i = 32 - incl_bits; i > 0; --i) {
+        for (int i = 31 - incl_bits; i >= 0; --i) {
             b |= 1 << i;
             mb |= 1 << i;
         }
         c = mc; d = md;
     } else if (incl_dwords == 2 && incl_bits) {
-        for (int i = 32 - incl_bits; i > 0; --i) {
+        for (int i = 31 - incl_bits; i >= 0; --i) {
             c |= 1 << i;
             mc |= 1 << i;
         }
         d = md;
     } else if (incl_dwords == 3 && incl_bits) {
-        for (int i = 32 - incl_bits; i > 0; --i) {
+        for (int i = 31 - incl_bits; i >= 0; --i) {
             d |= 1 << i;
             md |= 1 << i;
         }
