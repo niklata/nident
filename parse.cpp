@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 20:09:37 nk>
+ * Time-stamp: <2010-11-06 20:27:43 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -134,6 +134,7 @@ int Parse::parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
                     continue;
                 if (memcmp(&ti.local_address_, &sa, sizeof (struct in6_addr)))
                     continue;
+                found_ti_ = true;
                 ti_ = ti;
                 break;
             }
@@ -247,6 +248,7 @@ int Parse::parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
                     continue;
                 if (memcmp(&ti.local_address_, &sa, sizeof (struct in6_addr)))
                     continue;
+                found_ti_ = true;
                 ti_ = ti;
                 break;
             }
@@ -265,18 +267,19 @@ int Parse::parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
     return ti_.uid;
 }
 
-bool Parse::parse_cfg(const std::string &fn)
+// XXX: extend config format to mask by local address?
+bool Parse::parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
+                      struct in6_addr ca, int cp)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
     boost::regex re, re4, re6, rehost;
     boost::regex re_accept, re_deny, re_spoof, re_hash;
     boost::cmatch m;
-    bool ret = false;
 
     if (f.fail() || f.bad() || f.eof()) {
         std::cerr << "failed to open file: '" << fn << "'";
-        goto out1;
+        goto out;
     }
 
     // x.x.x.x[/n] (*|l[:h]) (*|l[:h]) -> POLICY
@@ -305,13 +308,13 @@ bool Parse::parse_cfg(const std::string &fn)
     while (1) {
         std::getline(f, l);
         if (f.eof()) {
-            goto out;
+            break;
         } else if (f.bad()) {
             std::cerr << "fatal io error fetching line of proc/net/tcp\n";
-            goto out;
+            break;
         } else if (f.fail()) {
             std::cerr << "non-fatal io error fetching line of proc/net/tcp\n";
-            goto out;
+            break;
         }
 
         if (boost::regex_match(l.c_str(), m, re)) {
@@ -366,8 +369,19 @@ bool Parse::parse_cfg(const std::string &fn)
                     ci.policy.setHashDP();
             } else
                 continue; // invalid
-            cfg_items.push_back(ci);
-            ret = true;
+            if (ci.low_lport != -1 && sp < ci.low_lport)
+                continue;
+            if (ci.high_lport != -1 && sp > ci.high_lport)
+                continue;
+            if (ci.low_rport != -1 && cp < ci.low_rport)
+                continue;
+            if (ci.high_rport != -1 && cp > ci.high_rport)
+                continue;
+            if (!compare_ipv6(ca, ci.host, ci.mask == -1 ? 0 : ci.mask))
+                continue;
+            found_ci_ = true;
+            ci_ = ci;
+            break;
 
 #if 0
             if (ci.type == HostIP6)
@@ -405,10 +419,9 @@ bool Parse::parse_cfg(const std::string &fn)
 #endif
         }
     }
-  out:
     f.close();
-  out1:
-    return ret;
+  out:
+    return found_ci_;
 }
 
 // Forms a proper ipv6 address lacking '::' and '.'
@@ -487,80 +500,55 @@ bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
         return false;
 }
 
-// XXX: extend config format to mask by local address?
 std::string Parse::get_response(struct in6_addr sa, int sp,
                                 struct in6_addr ca, int cp)
 {
     std::stringstream ss;
     std::string ret;
 
-    bool cmatched = false;
-    std::vector<ConfigItem>::iterator c;
-    for (c = cfg_items.begin(); c != cfg_items.end(); ++c) {
-        if (c->low_lport != -1 && sp < c->low_lport)
-            continue;
-        if (c->high_lport != -1 && sp > c->high_lport)
-            continue;
-        if (c->low_rport != -1 && cp < c->low_rport)
-            continue;
-        if (c->high_rport != -1 && cp > c->high_rport)
-            continue;
-        if (!compare_ipv6(ca, c->host, c->mask == -1 ? 0 : c->mask))
-            continue;
-        // Found our match.
-        cmatched = true;
-        break;
-    }
-    if (cmatched) {
-        if (c->policy.action == PolicyAccept) {
+    if (!found_ci_ || ci_.policy.action == PolicyDeny) {
+        if (gParanoid)
+            ss << "ERROR:UNKNOWN-ERROR";
+        else
+            ss << "ERROR:HIDDEN-USER";
+    } else if (ci_.policy.action == PolicyAccept) {
+        ss << "USERID:UNIX:";
+        ss << ti_.uid;
+    } else if (ci_.policy.action == PolicySpoof) {
+        if (!getpwnam(ci_.policy.spoof.c_str())) {
             ss << "USERID:UNIX:";
-            ss << ti_.uid;
-        } else if (c->policy.action == PolicyDeny) {
+            ss << ci_.policy.spoof;
+        } else {
+            // A username exists with the spoof name.
+            log_line("Spoof requested for extant user %s",
+                     ci_.policy.spoof.c_str());
             if (gParanoid)
                 ss << "ERROR:UNKNOWN-ERROR";
             else
                 ss << "ERROR:HIDDEN-USER";
-        } else if (c->policy.action == PolicySpoof) {
-            if (!getpwnam(c->policy.spoof.c_str())) {
-                ss << "USERID:UNIX:";
-                ss << c->policy.spoof;
-            } else {
-                // A username exists with the spoof name.
-                log_line("Spoof requested for extant user %s",
-                         c->policy.spoof.c_str());
-                if (gParanoid)
-                    ss << "ERROR:UNKNOWN-ERROR";
-                else
-                    ss << "ERROR:HIDDEN-USER";
-            }
-        } else if (c->policy.action == PolicyHash) {
-            std::stringstream sh;
-            std::string hashstr;
-            if (c->policy.isHashUID())
-                sh << ti_.uid;
-            if (c->policy.isHashIP()) {
-                char buf[32];
-                if (inet_ntop(AF_INET6, &ca, buf, sizeof buf))
-                    sh << buf;
-                else
-                    std::cerr << "inet_ntop(): failed for hash ip";
-            }
-            if (c->policy.isHashSP())
-                sh << sp;
-            if (c->policy.isHashDP())
-                sh << cp;
-            sh >> hashstr;
-            uint64_t result[3];
-            tiger(reinterpret_cast<const uint64_t *>(hashstr.c_str()),
-                  hashstr.size(), result);
-            std::string res = compress_64_to_unix(result[1]);
-            ss << "USERID:UNIX:" << res;
         }
-    } else {
-        if (gParanoid)
-            ss << "ERROR:UNKNOWN-ERROR";
-        else
-            ss << "ERROR:NO-USER";
+    } else if (ci_.policy.action == PolicyHash) {
+        std::stringstream sh;
+        std::string hashstr;
+        if (ci_.policy.isHashUID())
+            sh << ti_.uid;
+        if (ci_.policy.isHashIP()) {
+            char buf[32];
+            if (inet_ntop(AF_INET6, &ca, buf, sizeof buf))
+                sh << buf;
+            else
+                std::cerr << "inet_ntop(): failed for hash ip";
+        }
+        if (ci_.policy.isHashSP())
+            sh << sp;
+        if (ci_.policy.isHashDP())
+            sh << cp;
+        sh >> hashstr;
+        uint64_t result[3];
+        tiger(reinterpret_cast<const uint64_t *>(hashstr.c_str()),
+              hashstr.size(), result);
+        std::string res = compress_64_to_unix(result[1]);
+        ss << "USERID:UNIX:" << res;
     }
     ss >> ret;
     return ret;

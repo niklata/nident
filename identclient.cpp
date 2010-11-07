@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-06 20:07:17 nk>
+ * Time-stamp: <2010-11-06 20:29:05 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -319,7 +319,8 @@ bool IdentClient::create_reply()
         if (pw && pw->pw_dir) {
             std::string path(pw->pw_dir);
             path += "/.ident";
-            if (pa.parse_cfg(path))
+            if (pa.parse_cfg(path, server_address_, server_port_,
+                             client_address_, client_port_))
                 reply = pa.get_response(server_address_, server_port_,
                                         client_address_, client_port_);
         }

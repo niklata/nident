@@ -1,5 +1,5 @@
 /* parse.hpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 20:09:41 nk>
+ * Time-stamp: <2010-11-06 20:28:14 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -31,7 +31,6 @@
 #define PARSE_H_
 
 #include <string>
-#include <vector>
 
 #include <arpa/inet.h>
 
@@ -98,19 +97,26 @@ public:
             uid = -1;
         }
     };
+    Parse() {
+        found_ti_ = false;
+        found_ci_ = false;
+    }
     std::string get_response(struct in6_addr sa, int sp,
                              struct in6_addr ca, int cp);
     int parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
                    struct in6_addr ca, int cp);
     int parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
                     struct in6_addr ca, int cp);
-    bool parse_cfg(const std::string &fn);
+    bool parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
+                   struct in6_addr ca, int cp);
 private:
     bool compare_ipv6(struct in6_addr ip, struct in6_addr mask, int msize);
     struct in6_addr canon_ipv6(const std::string &ip, bool *ok = NULL);
     std::string compress_64_to_unix(uint64_t qword);
+    bool found_ti_;
     ProcTcpItem ti_;
-    std::vector<ConfigItem> cfg_items;
+    bool found_ci_;
+    ConfigItem ci_;
 };
 
 #endif /* PARSE_H_ */
