@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 19:34:41 nk>
+ * Time-stamp: <2010-11-06 19:56:48 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -265,17 +265,18 @@ int Parse::parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
     return ti_.uid;
 }
 
-void Parse::parse_cfg(const std::string &fn)
+bool Parse::parse_cfg(const std::string &fn)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
     boost::regex re, re4, re6, rehost;
     boost::regex re_accept, re_deny, re_spoof, re_hash;
     boost::cmatch m;
+    bool ret = false;
 
     if (f.fail() || f.bad() || f.eof()) {
         std::cerr << "failed to open file: '" << fn << "'";
-        return;
+        goto out1;
     }
 
     // x.x.x.x[/n] (*|l[:h]) (*|l[:h]) -> POLICY
@@ -304,13 +305,13 @@ void Parse::parse_cfg(const std::string &fn)
     while (1) {
         std::getline(f, l);
         if (f.eof()) {
-            break;
+            goto out;
         } else if (f.bad()) {
             std::cerr << "fatal io error fetching line of proc/net/tcp\n";
-            break;
+            goto out;
         } else if (f.fail()) {
             std::cerr << "non-fatal io error fetching line of proc/net/tcp\n";
-            break;
+            goto out;
         }
 
         if (boost::regex_match(l.c_str(), m, re)) {
@@ -366,6 +367,7 @@ void Parse::parse_cfg(const std::string &fn)
             } else
                 continue; // invalid
             cfg_items.push_back(ci);
+            ret = true;
 
 #if 0
             if (ci.type == HostIP6)
@@ -403,7 +405,10 @@ void Parse::parse_cfg(const std::string &fn)
 #endif
         }
     }
+  out:
     f.close();
+  out1:
+    return ret;
 }
 
 // Forms a proper ipv6 address lacking '::' and '.'
@@ -508,10 +513,11 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
     }
     if (cmatched) {
         if (c->policy.action == PolicyNone) {
+            // XXX Default policy PolicyDeny
             if (gParanoid)
                 ss << "ERROR:UNKNOWN-ERROR";
             else
-                ss << "ERROR:NO-USER";
+                ss << "ERROR:HIDDEN-USER";
         } else if (c->policy.action == PolicyAccept) {
             ss << "USERID:UNIX:";
             ss << ti_.uid;

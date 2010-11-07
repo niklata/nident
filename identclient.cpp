@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-06 19:21:12 nk>
+ * Time-stamp: <2010-11-06 20:07:17 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -33,6 +33,9 @@
 #include <unistd.h>
 #include <string.h> // memset
 
+#include <sys/types.h>
+#include <pwd.h>
+
 #include "epoll.hpp"
 #include "identclient.hpp"
 #include "parse.hpp"
@@ -41,6 +44,7 @@ extern "C" {
 #include "log.h"
 }
 
+extern bool gParanoid;
 unsigned int max_client_bytes = 128;
 
 IdentClient::IdentClient(int fd) : fd_(fd) {
@@ -297,16 +301,35 @@ bool IdentClient::create_reply()
         return false;
 
     Parse pa;
+    int uid = -1;
     if (client_type_ == HostIP4)
-        pa.parse_tcp("/proc/net/tcp", server_address_, server_port_,
-                     client_address_, client_port_);
+        uid = pa.parse_tcp("/proc/net/tcp", server_address_, server_port_,
+                           client_address_, client_port_);
     if (client_type_ == HostIP6)
-        pa.parse_tcp6("/proc/net/tcp6", server_address_, server_port_,
-                      client_address_, client_port_);
-    pa.parse_cfg("/home/njk/.ident"); // XXX:
-
-    std::string reply = pa.get_response(server_address_, server_port_,
+        uid = pa.parse_tcp6("/proc/net/tcp6", server_address_, server_port_,
+                            client_address_, client_port_);
+    std::string reply;
+    if (uid == -1) {
+        if (gParanoid)
+            reply = "ERROR:UNKNOWN-ERROR";
+        else
+            reply = "ERROR:NO-USER";
+    } else {
+        struct passwd *pw = getpwuid(uid);
+        if (pw && pw->pw_dir) {
+            std::string path(pw->pw_dir);
+            path += "/.ident";
+            if (pa.parse_cfg(path))
+                reply = pa.get_response(server_address_, server_port_,
                                         client_address_, client_port_);
+        }
+    }
+    if (!reply.size()) {
+        if (gParanoid)
+            reply = "ERROR:UNKNOWN-ERROR";
+        else
+            reply = "ERROR:HIDDEN-USER";
+    }
 
     outbuf_ = reply;
     outbuf_ += "\r\n";

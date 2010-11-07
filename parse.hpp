@@ -1,5 +1,5 @@
 /* parse.hpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 19:31:05 nk>
+ * Time-stamp: <2010-11-06 19:57:03 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -105,7 +105,7 @@ public:
                    struct in6_addr ca, int cp);
     int parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
                     struct in6_addr ca, int cp);
-    void parse_cfg(const std::string &fn);
+    bool parse_cfg(const std::string &fn);
 private:
     bool compare_ipv6(struct in6_addr ip, struct in6_addr mask, int msize);
     struct in6_addr canon_ipv6(const std::string &ip, bool *ok = NULL);
