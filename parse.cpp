@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 20:32:48 nk>
+ * Time-stamp: <2010-11-06 21:59:12 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -272,7 +272,7 @@ bool Parse::parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
     // POLICY:
     // deny||accept
     // spoof string
-    // hash [uid] [ip] [sp] [dp]
+    // hash [uid] [ip] [sp] [cp]
     re.assign("\\s*([a-zA-Z0-9:.-]+)"//"\\s*([0-9A-Fa-f:.]+)" // ipv[46]
               "(?:/(\\d{1,2}))?"
               "\\s+(?:\\*|(\\d{1,5})(?::(\\d{1,5}))?)"
@@ -286,7 +286,7 @@ bool Parse::parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
     re_accept.assign("^accept\\s*", boost::regex_constants::icase);
     re_spoof.assign("^spoof\\s+([A-Za-z0-9]+)\\s*",
                     boost::regex_constants::icase);
-    re_hash.assign("^hash(\\s+(?:uid|ip|sp|dp))+\\s*",
+    re_hash.assign("^hash(\\s+(?:uid|ip|sp|cp))+\\s*",
                    boost::regex_constants::icase);
 
     while (1) {
@@ -349,8 +349,8 @@ bool Parse::parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
                     ci.policy.setHashIP();
                 if (boost::regex_match(polstr.c_str(), o, boost::regex(".*?sp.*?")))
                     ci.policy.setHashSP();
-                if (boost::regex_match(polstr.c_str(), o, boost::regex(".*?dp.*?")))
-                    ci.policy.setHashDP();
+                if (boost::regex_match(polstr.c_str(), o, boost::regex(".*?cp.*?")))
+                    ci.policy.setHashCP();
             } else
                 continue; // invalid
             if (ci.low_lport != -1 && sp < ci.low_lport)
@@ -484,7 +484,7 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
         }
         if (ci_.policy.isHashSP())
             sh << sp;
-        if (ci_.policy.isHashDP())
+        if (ci_.policy.isHashCP())
             sh << cp;
         sh >> hashstr;
         uint64_t result[3];

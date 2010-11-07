@@ -1,5 +1,5 @@
 /* parse.hpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 20:28:14 nk>
+ * Time-stamp: <2010-11-06 21:59:43 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -54,7 +54,7 @@ public:
             fHashUID = 1,
             fHashIP = 2,
             fHashSP = 4,
-            fHashDP = 8
+            fHashCP = 8
         };
         PolicyAction action;
         std::string spoof;
@@ -62,11 +62,11 @@ public:
         void setHashUID() { hashitems |= fHashUID; }
         void setHashIP() { hashitems |= fHashIP; }
         void setHashSP() { hashitems |= fHashSP; }
-        void setHashDP() { hashitems |= fHashDP; }
+        void setHashCP() { hashitems |= fHashCP; }
         bool isHashUID() const { return (hashitems & fHashUID) ? true : false; }
         bool isHashIP() const { return (hashitems & fHashIP) ? true : false; }
         bool isHashSP() const { return (hashitems & fHashSP) ? true : false; }
-        bool isHashDP() const { return (hashitems & fHashDP) ? true : false; }
+        bool isHashCP() const { return (hashitems & fHashCP) ? true : false; }
     private:
         int hashitems;
     };
