@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-06 20:53:56 nk>
+ * Time-stamp: <2010-11-06 20:59:02 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -133,10 +133,8 @@ IdentClient::ParseState IdentClient::parse_request()
                     std::stringstream ss;
                     ss << sport;
                     ss >> server_port_;
-                    if (server_port_ < 1 || server_port_ > 65535) {
-                        state = ParseBadPort;
-                        return state;
-                    }
+                    if (server_port_ < 1 || server_port_ > 65535)
+                        return ParseBadPort;
                     state = ParseClientPort;
                     prev_idx = i + 1;
                     found_num = false;
@@ -149,18 +147,13 @@ IdentClient::ParseState IdentClient::parse_request()
                         found_num = true;
                         prev_idx = i;
                     }
-                    if (found_ws_after_num) {
-                        state = ParseInvalid;
-                        return state;
-                    }
-                    if (++sp_len > 5) {
-                        state = ParseBadPort;
-                        return state;
-                    }
+                    if (found_ws_after_num)
+                        return ParseInvalid;
+                    if (++sp_len > 5)
+                        return ParseBadPort;
                     continue;
                 default:
-                    state = ParseInvalid;
-                    return state;
+                    return ParseInvalid;
             }
         } else if (state == ParseClientPort) {
             switch (c) {
@@ -178,18 +171,13 @@ IdentClient::ParseState IdentClient::parse_request()
                         found_num = true;
                         prev_idx = i;
                     }
-                    if (found_ws_after_num) {
-                        state = ParseInvalid;
-                        return state;
-                    }
-                    if (++cp_len > 5) {
-                        state = ParseBadPort;
-                        return state;
-                    }
+                    if (found_ws_after_num)
+                        return ParseInvalid;
+                    if (++cp_len > 5)
+                        return ParseBadPort;
                     continue;
                 default:
-                    state = ParseInvalid;
-                    return state;
+                    return ParseInvalid;
             }
         }
     }
@@ -199,12 +187,9 @@ IdentClient::ParseState IdentClient::parse_request()
         std::stringstream ss;
         ss << cport;
         ss >> client_port_;
-        if (client_port_ < 1 || client_port_ > 65535) {
-            state = ParseBadPort;
-            return state;
-        }
-        state = ParseDone;
-        return state;
+        if (client_port_ < 1 || client_port_ > 65535)
+            return ParseBadPort;
+        return ParseDone;
     }
     return ParseInvalid;
 }
