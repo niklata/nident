@@ -1,5 +1,5 @@
 /* parse.hpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 19:57:03 nk>
+ * Time-stamp: <2010-11-06 20:09:41 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -44,9 +44,8 @@ public:
         HostIP6
     };
     enum PolicyAction {
-        PolicyNone,
-        PolicyAccept,
         PolicyDeny,
+        PolicyAccept,
         PolicySpoof,
         PolicyHash
     };
@@ -60,7 +59,7 @@ public:
         };
         PolicyAction action;
         std::string spoof;
-        Policy() { action = PolicyNone; hashitems = fHashNone; }
+        Policy() { action = PolicyDeny; hashitems = fHashNone; }
         void setHashUID() { hashitems |= fHashUID; }
         void setHashIP() { hashitems |= fHashIP; }
         void setHashSP() { hashitems |= fHashSP; }

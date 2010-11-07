@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 19:56:48 nk>
+ * Time-stamp: <2010-11-06 20:09:37 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -512,13 +512,7 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
         break;
     }
     if (cmatched) {
-        if (c->policy.action == PolicyNone) {
-            // XXX Default policy PolicyDeny
-            if (gParanoid)
-                ss << "ERROR:UNKNOWN-ERROR";
-            else
-                ss << "ERROR:HIDDEN-USER";
-        } else if (c->policy.action == PolicyAccept) {
+        if (c->policy.action == PolicyAccept) {
             ss << "USERID:UNIX:";
             ss << ti_.uid;
         } else if (c->policy.action == PolicyDeny) {
