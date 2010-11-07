@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-11-06 08:12:31 nk>
+ * Time-stamp: <2010-11-06 21:08:27 nk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -68,7 +68,7 @@ extern "C" {
 #include "strlist.h"
 }
 
-bool gParanoid = true;
+bool gParanoid = false;
 
 static volatile sig_atomic_t pending_reap;
 volatile sig_atomic_t pending_exit;
@@ -142,12 +142,13 @@ int main(int argc, char** argv) {
 	    {"port", 1, 0, 'p'},
 	    {"user", 1, 0, 'u'},
 	    {"group", 1, 0, 'g'},
+	    {"paranoid", 0, 0, 'P'},
 	    {"help", 0, 0, 'h'},
 	    {"version", 0, 0, 'v'},
 	    {0, 0, 0, 0}
 	};
 
-	c = getopt_long(argc, argv, "dnf:qc:e:b:B:a:p:ou:g:hv",
+	c = getopt_long(argc, argv, "dnf:qc:e:b:B:a:p:ou:g:Phv",
 			long_options, &option_index);
 	if (c == -1)
 	    break;
@@ -173,6 +174,8 @@ int main(int argc, char** argv) {
 		printf(
 		    "  -u, --user                  user name that nident should run as\n"
 		    "  -g, --group                 group name that nident should run as\n"
+		    "  -P, --paranoid              return UNKNOWN-ERROR for all errors except\n"
+                    "                              INVALID-PORT (prevents inference of used ports)\n"
 		    "  -h, --help                  print this help and exit\n"
 		    "  -v, --version               print license information and exit\n");
 		exit(EXIT_FAILURE);
@@ -268,6 +271,10 @@ int main(int argc, char** argv) {
 		    } else suicide("invalid gid specified");
 		} else
 		    gid = t;
+		break;
+
+	    case 'P':
+		gParanoid = true;
 		break;
 
 	    case 'e':
