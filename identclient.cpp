@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-06 20:29:05 nk>
+ * Time-stamp: <2010-11-06 20:53:56 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -109,16 +109,13 @@ bool IdentClient::process_input()
     return true;
 }
 
-// Returns false if the object needs to be destroyed by the caller.
-bool IdentClient::parse_request()
+// Returns ParseInvalid if the object needs to be destroyed by the caller.
+IdentClient::ParseState IdentClient::parse_request()
 {
-    enum ParseState {
-        ParseInvalid,
-        ParseServerPort,
-        ParseClientPort,
-        ParseDone
-    } state = ParseServerPort;
+    ParseState state = ParseServerPort;
     int prev_idx = 0;
+    int sp_len = 0;
+    int cp_len = 0;
     size_t i;
     bool found_num = false;
     bool found_ws_after_num = false;
@@ -136,6 +133,10 @@ bool IdentClient::parse_request()
                     std::stringstream ss;
                     ss << sport;
                     ss >> server_port_;
+                    if (server_port_ < 1 || server_port_ > 65535) {
+                        state = ParseBadPort;
+                        return state;
+                    }
                     state = ParseClientPort;
                     prev_idx = i + 1;
                     found_num = false;
@@ -150,12 +151,16 @@ bool IdentClient::parse_request()
                     }
                     if (found_ws_after_num) {
                         state = ParseInvalid;
-                        return false;
+                        return state;
+                    }
+                    if (++sp_len > 5) {
+                        state = ParseBadPort;
+                        return state;
                     }
                     continue;
                 default:
                     state = ParseInvalid;
-                    return false;
+                    return state;
             }
         } else if (state == ParseClientPort) {
             switch (c) {
@@ -175,12 +180,16 @@ bool IdentClient::parse_request()
                     }
                     if (found_ws_after_num) {
                         state = ParseInvalid;
-                        return false;
+                        return state;
+                    }
+                    if (++cp_len > 5) {
+                        state = ParseBadPort;
+                        return state;
                     }
                     continue;
                 default:
                     state = ParseInvalid;
-                    return false;
+                    return state;
             }
         }
     }
@@ -190,10 +199,14 @@ bool IdentClient::parse_request()
         std::stringstream ss;
         ss << cport;
         ss >> client_port_;
+        if (client_port_ < 1 || client_port_ > 65535) {
+            state = ParseBadPort;
+            return state;
+        }
         state = ParseDone;
-        return true;
+        return state;
     }
-    return false;
+    return ParseInvalid;
 }
 
 bool IdentClient::decipher_addr(const struct sockaddr_storage &addr,
@@ -285,10 +298,9 @@ bool IdentClient::get_peer_info()
 // State can change: STATE_GOTIN -> STATE_WAITOUT
 bool IdentClient::create_reply()
 {
+    std::string reply;
+
     outbuf_.clear();
-    if (!parse_request()) {
-        return false;
-    }
 
     if (!get_local_info())
         return false;
@@ -300,36 +312,45 @@ bool IdentClient::create_reply()
     if (client_type_ != server_type_)
         return false;
 
-    Parse pa;
-    int uid = -1;
-    if (client_type_ == HostIP4)
-        uid = pa.parse_tcp("/proc/net/tcp", server_address_, server_port_,
-                           client_address_, client_port_);
-    if (client_type_ == HostIP6)
-        uid = pa.parse_tcp6("/proc/net/tcp6", server_address_, server_port_,
-                            client_address_, client_port_);
-    std::string reply;
-    if (uid == -1) {
-        if (gParanoid)
-            reply = "ERROR:UNKNOWN-ERROR";
-        else
-            reply = "ERROR:NO-USER";
+    ParseState ps = parse_request();
+    if (ps == ParseInvalid) {
+        return false;
+    } else if (ps == ParseBadPort) {
+        reply = "ERROR:INVALID-PORT";
+    } else if (ps == ParseServerPort || ps == ParseClientPort) {
+        log_line("Request parse incomplete: should never happen.");
+        return false;
     } else {
-        struct passwd *pw = getpwuid(uid);
-        if (pw && pw->pw_dir) {
-            std::string path(pw->pw_dir);
-            path += "/.ident";
-            if (pa.parse_cfg(path, server_address_, server_port_,
-                             client_address_, client_port_))
-                reply = pa.get_response(server_address_, server_port_,
-                                        client_address_, client_port_);
+        Parse pa;
+        int uid = -1;
+        if (client_type_ == HostIP4)
+            uid = pa.parse_tcp("/proc/net/tcp", server_address_, server_port_,
+                               client_address_, client_port_);
+        if (client_type_ == HostIP6)
+            uid = pa.parse_tcp6("/proc/net/tcp6", server_address_, server_port_,
+                                client_address_, client_port_);
+        if (uid == -1) {
+            if (gParanoid)
+                reply = "ERROR:UNKNOWN-ERROR";
+            else
+                reply = "ERROR:NO-USER";
+        } else {
+            struct passwd *pw = getpwuid(uid);
+            if (pw && pw->pw_dir) {
+                std::string path(pw->pw_dir);
+                path += "/.ident";
+                if (pa.parse_cfg(path, server_address_, server_port_,
+                                 client_address_, client_port_))
+                    reply = pa.get_response(server_address_, server_port_,
+                                            client_address_, client_port_);
+            }
         }
-    }
-    if (!reply.size()) {
-        if (gParanoid)
-            reply = "ERROR:UNKNOWN-ERROR";
-        else
-            reply = "ERROR:HIDDEN-USER";
+        if (!reply.size()) {
+            if (gParanoid)
+                reply = "ERROR:UNKNOWN-ERROR";
+            else
+                reply = "ERROR:HIDDEN-USER";
+        }
     }
 
     outbuf_ = reply;

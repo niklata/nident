@@ -1,5 +1,5 @@
 /* identclient.hpp - ident client request handling
- * Time-stamp: <2010-11-06 18:08:25 nk>
+ * Time-stamp: <2010-11-06 20:49:46 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -34,6 +34,13 @@
 #include <netdb.h>
 
 class IdentClient {
+    enum ParseState {
+        ParseInvalid,
+        ParseBadPort,
+        ParseServerPort,
+        ParseClientPort,
+        ParseDone
+    };
 public:
     enum IdentClientState {
         STATE_WAITIN,
@@ -65,12 +72,12 @@ public:
     ~IdentClient();
 
     bool process_input();
-    bool parse_request();
     bool create_reply();
     bool get_local_info();
     bool get_peer_info();
     bool process_output();
 private:
+    ParseState parse_request();
     bool decipher_addr(const struct sockaddr_storage &addr,
                        struct in6_addr *addy, HostType *htype,
                        std::string *addyp = NULL);
