@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 20:27:43 nk>
+ * Time-stamp: <2010-11-06 20:32:48 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -138,15 +138,6 @@ int Parse::parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
                 ti_ = ti;
                 break;
             }
-#if 0
-            std::cout << "local: " << "0000:0000:0000:0000:0000:ffff:"
-                      << a << "." << b << "." << c << "." << d << "\n";
-            std::cout << "lport: " << ti.local_port_ << "\n";
-            std::cout << "rmote: " << "0000:0000:0000:0000:0000:ffff:"
-                      << e << "." << f << "." << g << "." << h << "\n";
-            std::cout << "rport: " << ti.remote_port_ << "\n";
-            std::cout << "uid: " << m[13] << "\n";
-#endif
         }
     }
   out:
@@ -252,13 +243,6 @@ int Parse::parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
                 ti_ = ti;
                 break;
             }
-#if 0
-            std::cout << "local: " << la6.str() << "\n";
-            std::cout << "lport: " << ti.local_port_ << "\n";
-            std::cout << "rmote: " << ra6.str() << "\n";
-            std::cout << "rport: " << ti.remote_port_ << "\n";
-            std::cout << "uid: " << ti.uid << "\n";
-#endif
         }
     }
   out:
@@ -382,41 +366,6 @@ bool Parse::parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
             found_ci_ = true;
             ci_ = ci;
             break;
-
-#if 0
-            if (ci.type == HostIP6)
-                std::cout << "ipv6: " << hoststr << "\n";
-            else if (ci.type == HostIP4)
-                std::cout << "ipv4: " << hoststr << "\n";
-            else if (ci.type == HostName)
-                std::cout << "host: " << hoststr << "\n";
-            else
-                continue; // invalid
-            std::cout << "mask size: " << ci.mask << "\n";
-            std::cout << "local low port: " << ci.low_lport << "\n";
-            std::cout << "local high port: " << ci.high_lport << "\n";
-            std::cout << "remote low port: " << ci.low_rport << "\n";
-            std::cout << "remote high port: " << ci.high_rport << "\n";
-            if (ci.policy.action == PolicyDeny)
-                std::cout << "Policy: deny\n";
-            else if (ci.policy.action == PolicyAccept)
-                std::cout << "Policy: accept\n";
-            else if (ci.policy.action == PolicySpoof)
-                std::cout << "Policy: spoof [" << ci.policy.spoof << "]\n";
-            else if (ci.policy.action == PolicyHash) {
-                std::cout << "Policy: hash";
-                if (ci.policy.isHashUID())
-                    std::cout << " uid";
-                if (ci.policy.isHashIP())
-                    std::cout << " ip";
-                if (ci.policy.isHashSP())
-                    std::cout << " sp";
-                if (ci.policy.isHashDP())
-                    std::cout << " dp";
-                std::cout << "\n";
-            } else
-                continue; // invalid
-#endif
         }
     }
     f.close();
@@ -471,13 +420,7 @@ bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
     inet_ntop(AF_INET6, &mask, buf, sizeof buf);
     int incl_qwords = msize / 64;
     int incl_bits = msize % 64;
-#if 0
-    std::cout << "cmp ip: " << buf << "\n";
-    std::cout << "cmpmsk: " << buf << " bits: " << msize << "\n";
-    std::cout << "\na: " << a << " b: " << b << "\n";
-    std::cout << "ma: " << ma << " mb: " << mb << "\n";
-    std::cout << "incl_qwords = " << incl_qwords << " incl_bits = " << incl_bits << "\n";
-#endif
+
     if (incl_qwords == 0 && incl_bits == 0) { // wildcard mask
         return true;
     } else if (ma == 0 && mb == 0) { // wildcard
