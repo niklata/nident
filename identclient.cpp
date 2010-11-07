@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-06 20:59:02 nk>
+ * Time-stamp: <2010-11-06 22:42:04 nk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -338,10 +338,12 @@ bool IdentClient::create_reply()
         }
     }
 
-    outbuf_ = reply;
-    outbuf_ += "\r\n";
+    std::stringstream ss;
+    ss << server_port_ << "," << client_port_ << ":" << reply;
+    ss >> outbuf_;
     log_line("(%s) %d,%d -> %s", client_address_pretty_.c_str(),
-             server_port_, client_port_, reply.c_str());
+             server_port_, client_port_, outbuf_.c_str());
+    outbuf_ += "\r\n";
     state_ = STATE_WAITOUT;
     schedule_write(fd_);
     return true;
