@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-11-06 21:08:27 nk>
+ * Time-stamp: <2010-11-06 21:15:14 nk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
     int c, t, uid = 0, gid = 0, len;
     unsigned int port = 0;
     int backlog = 30;
-    std::string pidfile, chrootd;
+    std::string pidfile;
     char *p;
     struct passwd *pws;
     struct group *grp;
@@ -134,7 +134,6 @@ int main(int argc, char** argv) {
 	    {"nodetach", 0, 0, 'n'},
 	    {"pidfile", 1, 0, 'f'},
 	    {"quiet", 0, 0, 'q'},
-	    {"chroot", 1, 0, 'c'},
 	    {"max-events", 1, 0, 'e'},
 	    {"backlog", 1, 0, 'b'},
 	    {"max-bytes", 1, 0, 'B'},
@@ -148,7 +147,7 @@ int main(int argc, char** argv) {
 	    {0, 0, 0, 0}
 	};
 
-	c = getopt_long(argc, argv, "dnf:qc:e:b:B:a:p:ou:g:Phv",
+	c = getopt_long(argc, argv, "dnf:qe:b:B:a:p:ou:g:Phv",
 			long_options, &option_index);
 	if (c == -1)
 	    break;
@@ -163,7 +162,6 @@ int main(int argc, char** argv) {
 		    "  -d, --detach                detach from TTY and daemonize (default)\n"
 		    "  -n, --nodetach              stay attached to TTY\n"
 		    "  -q, --quiet                 don't print to std(out|err) or log\n"
-		    "  -c, --config-dir            configuration directory\n"
 		    "  -e, --max-events            max events processed per epoll_wait\n");
 		printf(
 		    "  -b, --backlog               maximum simultaneous connections accepted\n"
@@ -233,11 +231,6 @@ int main(int argc, char** argv) {
 
 	    case 'p':
 		port = atoi(optarg);
-		break;
-
-	    case 'c':
-		len = strlen(optarg);
-		chrootd = std::string(optarg, len);
 		break;
 
 	    case 'f':
@@ -320,13 +313,10 @@ int main(int argc, char** argv) {
     if (sockets == NULL)
 	suicide("unable to create any listen sockets");
 
-    //imprison(chrootd.c_str());
-
     if (uid != 0 || gid != 0)
 	drop_root(uid, gid);
 
     /* Cover our tracks... */
-    chrootd.clear();
     pidfile.clear();
 
     epoll_init(sockets);
