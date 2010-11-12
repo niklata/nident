@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-07 03:25:21 njk>
+ * Time-stamp: <2010-11-12 14:36:58 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -102,9 +102,9 @@ bool IdentClient::process_input()
         inbuf_ += buf[i];
     }
     if (state_ == STATE_GOTIN) {
-        unschedule_read(fd_);
         if (!create_reply())
             return false;
+        unschedule_read(fd_);
     }
     return true;
 }
@@ -199,7 +199,7 @@ bool IdentClient::decipher_addr(const struct sockaddr_storage &addr,
                                 std::string *addyp)
 {
     if (addr.ss_family == AF_INET) {
-        char hoststr[32];
+        char hoststr[64];
         struct sockaddr_in *s = (struct sockaddr_in *)&addr;
         int r;
         if (htype)
@@ -222,7 +222,7 @@ bool IdentClient::decipher_addr(const struct sockaddr_storage &addr,
             return false;
         }
     } else if (addr.ss_family == AF_INET6) {
-        char hoststr[32];
+        char hoststr[64];
         struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
         int r;
         if (htype)
