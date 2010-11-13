@@ -1,5 +1,5 @@
 /* epoll.cpp - ident server event handling
- * Time-stamp: <2010-11-06 08:38:50 nk>
+ * Time-stamp: <2010-11-12 22:16:45 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -57,37 +57,61 @@ int max_ev_events;
 void schedule_read(int fd)
 {
     struct epoll_event ev;
+    int r;
     ev.events = EPOLLIN;
     ev.data.fd = fd;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1)
-        suicide("schedule_read: epoll_ctl failed");
+    r = epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
+    if (r == -1) {
+        if (errno == EEXIST)
+            log_line("schedule_read: epoll_ctl fd already registered");
+        else
+            suicide("schedule_read: epoll_ctl failed %s", strerror(errno));
+    }
 }
 
 void unschedule_read(int fd)
 {
     struct epoll_event ev;
+    int r;
     ev.events = EPOLLIN;
     ev.data.fd = fd;
-    if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev) == -1)
-        suicide("unschedule_read: epoll_ctl failed");
+    r = epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev);
+    if (r == -1) {
+        if (errno == ENOENT)
+            log_line("unschedule_read: epoll_ctl fd already registered");
+        else
+            suicide("unschedule_read: epoll_ctl failed %s", strerror(errno));
+    }
 }
 
 void schedule_write(int fd)
 {
     struct epoll_event ev;
+    int r;
     ev.events = EPOLLOUT;
     ev.data.fd = fd;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1)
-        suicide("schedule_write: epoll_ctl failed");
+    r = epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
+    if (r == -1) {
+        if (errno == EEXIST)
+            log_line("schedule_write: epoll_ctl fd already registered");
+        else
+            suicide("schedule_write: epoll_ctl failed %s", strerror(errno));
+    }
 }
 
 void unschedule_write(int fd)
 {
     struct epoll_event ev;
+    int r;
     ev.events = EPOLLOUT;
     ev.data.fd = fd;
-    if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev) == -1)
-        suicide("unschedule_write: epoll_ctl failed");
+    r = epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev);
+    if (r == -1) {
+        if (errno == ENOENT)
+            log_line("unschedule_write: epoll_ctl fd already registered");
+        else
+            suicide("unschedule_write: epoll_ctl failed %s", strerror(errno));
+    }
 }
 
 /* Abstracts away the details of accept()ing a socket connection. */
