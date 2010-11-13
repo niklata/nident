@@ -1,5 +1,5 @@
 /* epoll.cpp - ident server event handling
- * Time-stamp: <2010-11-12 22:16:45 njk>
+ * Time-stamp: <2010-11-12 22:21:06 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -210,7 +210,7 @@ void epoll_dispatch_work(void)
                 if (events[i].events & EPOLLIN) {
                     IdentClient *id = iter->second;
                     if (!id->process_input()) {
-                        unschedule_read(fd);
+                        // Read watch is already unscheduled.
                         clientmap.erase(iter);
                         delete id;
                         continue;
