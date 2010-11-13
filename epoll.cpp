@@ -1,5 +1,5 @@
 /* epoll.cpp - ident server event handling
- * Time-stamp: <2010-11-12 22:21:06 njk>
+ * Time-stamp: <2010-11-12 23:02:59 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -54,63 +54,51 @@ static int epollfd;
 static struct epoll_event *events;
 int max_ev_events;
 
-void schedule_read(int fd)
+void epoll_add(int fd)
 {
     struct epoll_event ev;
     int r;
-    ev.events = EPOLLIN;
+    ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
     ev.data.fd = fd;
     r = epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
     if (r == -1) {
-        if (errno == EEXIST)
-            log_line("schedule_read: epoll_ctl fd already registered");
-        else
-            suicide("schedule_read: epoll_ctl failed %s", strerror(errno));
+        suicide("epoll_add failed %s", strerror(errno));
     }
 }
 
-void unschedule_read(int fd)
+void epoll_del(int fd)
 {
     struct epoll_event ev;
     int r;
-    ev.events = EPOLLIN;
+    ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
     ev.data.fd = fd;
     r = epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev);
     if (r == -1) {
-        if (errno == ENOENT)
-            log_line("unschedule_read: epoll_ctl fd already registered");
-        else
-            suicide("unschedule_read: epoll_ctl failed %s", strerror(errno));
+        suicide("epoll_del failed %s", strerror(errno));
     }
 }
 
-void schedule_write(int fd)
+void epoll_set_write(int fd)
 {
     struct epoll_event ev;
     int r;
-    ev.events = EPOLLOUT;
+    ev.events = EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
     ev.data.fd = fd;
-    r = epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
+    r = epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
     if (r == -1) {
-        if (errno == EEXIST)
-            log_line("schedule_write: epoll_ctl fd already registered");
-        else
-            suicide("schedule_write: epoll_ctl failed %s", strerror(errno));
+        suicide("epoll_set_write failed %s", strerror(errno));
     }
 }
 
-void unschedule_write(int fd)
+void epoll_unset_write(int fd)
 {
     struct epoll_event ev;
     int r;
-    ev.events = EPOLLOUT;
+    ev.events = EPOLLIN | EPOLLRDHUP | EPOLLERR | EPOLLHUP;
     ev.data.fd = fd;
-    r = epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev);
+    r = epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
     if (r == -1) {
-        if (errno == ENOENT)
-            log_line("unschedule_write: epoll_ctl fd already registered");
-        else
-            suicide("unschedule_write: epoll_ctl failed %s", strerror(errno));
+        suicide("epoll_unset_write failed %s", strerror(errno));
     }
 }
 
@@ -128,7 +116,7 @@ static void accept_conns(int lsock)
             IdentClient *cid = new IdentClient(fd);
             clientmap[fd] = cid;
             tcp_set_sock_nonblock(fd);
-            schedule_read(fd);
+            epoll_add(fd);
             return;
         }
 
@@ -173,6 +161,7 @@ void epoll_init(int *sockets)
         suicide("epoll_create1 failed");
     events = new struct epoll_event[max_ev_events];
 
+    // Initialize the listen server sockets.
     for (int i = 1; i < sockets[0]; ++i) {
         if (sockets[i] < 0)
             continue;
@@ -210,7 +199,6 @@ void epoll_dispatch_work(void)
                 if (events[i].events & EPOLLIN) {
                     IdentClient *id = iter->second;
                     if (!id->process_input()) {
-                        // Read watch is already unscheduled.
                         clientmap.erase(iter);
                         delete id;
                         continue;
@@ -218,17 +206,14 @@ void epoll_dispatch_work(void)
                 } else if (events[i].events & EPOLLOUT) {
                     IdentClient *id = iter->second;
                     if (!id->process_output()) {
-                        unschedule_write(fd);
                         clientmap.erase(iter);
                         delete id;
                         continue;
                     }
-                } else if (events[i].events & EPOLLHUP) {
+                } else if (events[i].events & EPOLLHUP ||
+                           events[i].events & EPOLLRDHUP ||
+                           events[i].events & EPOLLERR) {
                     IdentClient *id = iter->second;
-                    if (id->state_ == IdentClient::STATE_WAITIN)
-                        unschedule_read(fd);
-                    else if (id->state_ == IdentClient::STATE_WAITOUT)
-                        unschedule_write(fd);
                     clientmap.erase(iter);
                     delete id;
                     continue;

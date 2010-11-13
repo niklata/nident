@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-11-12 22:20:36 njk>
+ * Time-stamp: <2010-11-12 23:02:08 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -56,6 +56,9 @@ IdentClient::IdentClient(int fd) : fd_(fd) {
 }
 
 IdentClient::~IdentClient() {
+    if (state_ == STATE_WAITOUT)
+        epoll_unset_write(fd_);
+    epoll_del(fd_);
     close(fd_);
 }
 
@@ -102,7 +105,6 @@ bool IdentClient::process_input()
         inbuf_ += buf[i];
     }
     if (state_ == STATE_GOTIN) {
-        unschedule_read(fd_);
         if (!create_reply())
             return false;
     }
@@ -342,8 +344,8 @@ bool IdentClient::create_reply()
     ss << server_port_ << "," << client_port_ << ":" << reply;
     ss >> outbuf_;
     outbuf_ += "\r\n";
+    epoll_set_write(fd_);
     state_ = STATE_WAITOUT;
-    schedule_write(fd_);
     log_line("(%s) %d,%d -> %s", client_address_pretty_.c_str(),
              server_port_, client_port_, reply.c_str());
     return true;
@@ -368,6 +370,7 @@ bool IdentClient::process_output()
         outbuf_.erase(0, written);
     }
     if (outbuf_.size() == 0) {
+        epoll_unset_write(fd_);
         state_ = STATE_DONE;
         return false;
     }

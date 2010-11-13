@@ -1,5 +1,5 @@
 /* epoll.hpp - ident server event handling
- * Time-stamp: <2010-11-03 13:10:52 nk>
+ * Time-stamp: <2010-11-12 23:00:49 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -30,10 +30,10 @@
 #ifndef NK_EPOLL_H_
 #define NK_EPOLL_H_
 
-void schedule_read(int fd);
-void unschedule_read(int fd);
-void schedule_write(int fd);
-void unschedule_write(int fd);
+void epoll_add(int fd);
+void epoll_del(int fd);
+void epoll_set_write(int fd);
+void epoll_unset_write(int fd);
 void epoll_init(int *sockets);
 void epoll_dispatch_work(void);
 
