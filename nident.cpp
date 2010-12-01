@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-12-01 00:49:18 njk>
+ * Time-stamp: <2010-12-01 00:51:49 njk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -60,7 +60,6 @@ extern "C" {
 #include "log.h"
 #include "chroot.h"
 #include "pidfile.h"
-#include "signals.h"
 #include "strl.h"
 #include "exec.h"
 #include "network.h"
