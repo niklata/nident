@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2010-11-06 21:15:14 nk>
+ * Time-stamp: <2010-12-01 00:49:18 njk>
  *
  * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -39,9 +39,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/signalfd.h>
 #include <fcntl.h>
 #include <ctype.h>
 
@@ -70,46 +69,25 @@ extern "C" {
 
 bool gParanoid = false;
 
-static volatile sig_atomic_t pending_reap;
-volatile sig_atomic_t pending_exit;
-
-static void sighandler(int sig) {
-    switch (sig) {
-	case SIGTERM:
-	case SIGINT:
-	    pending_exit = 1;
-	    break;
-	case SIGCHLD:
-	    pending_reap = 1;
-	    break;
-    }
-}
+int gSignalFd;
 
 static void fix_signals(void) {
-    disable_signal(SIGPIPE);
-    disable_signal(SIGUSR1);
-    disable_signal(SIGUSR2);
-    disable_signal(SIGTSTP);
-    disable_signal(SIGTTIN);
-    disable_signal(SIGHUP);
-
-    hook_signal(SIGCHLD, sighandler, 0);
-    hook_signal(SIGINT, sighandler, 0);
-    hook_signal(SIGTERM, sighandler, 0);
-}
-
-static void grim_reaper(void)
-{
-    while (waitpid(-1, NULL, WNOHANG) > 0);
-    pending_reap = 0;
-}
-
-void handle_signals(void)
-{
-    if (pending_reap)
-	grim_reaper();
-    if (pending_exit)
-	exit(EXIT_SUCCESS);
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+    sigaddset(&mask, SIGINT);
+    sigaddset(&mask, SIGTERM);
+    sigaddset(&mask, SIGPIPE);
+    sigaddset(&mask, SIGUSR1);
+    sigaddset(&mask, SIGUSR2);
+    sigaddset(&mask, SIGTSTP);
+    sigaddset(&mask, SIGTTIN);
+    sigaddset(&mask, SIGHUP);
+    if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0)
+	suicide("sigprocmask failed");
+    gSignalFd = signalfd(-1, &mask, SFD_NONBLOCK);
+    if (gSignalFd < 0)
+	suicide("signalfd failed");
 }
 
 int main(int argc, char** argv) {
@@ -123,7 +101,6 @@ int main(int argc, char** argv) {
     strlist_t *addrlist = NULL;
     int *sockets = NULL;
 
-    pending_exit = 0;
     max_ev_events = 4;
     gflags_log_name = const_cast<char *>("nident");
 
@@ -320,6 +297,7 @@ int main(int argc, char** argv) {
     pidfile.clear();
 
     epoll_init(sockets);
+    epoll_add(gSignalFd);
     epoll_dispatch_work();
 
     exit(EXIT_SUCCESS);

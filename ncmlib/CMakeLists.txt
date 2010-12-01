@@ -8,6 +8,7 @@ set(NCMLIB_SRCS
   log.c
   chroot.c
   network.c
+  io.c
   )
 
 add_library(ncmlib ${NCMLIB_SRCS})

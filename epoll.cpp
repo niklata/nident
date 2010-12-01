@@ -1,5 +1,5 @@
 /* epoll.cpp - ident server event handling
- * Time-stamp: <2010-11-12 23:02:59 njk>
+ * Time-stamp: <2010-12-01 00:46:26 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -35,6 +35,9 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <sys/epoll.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/signalfd.h>
 
 #include "identclient.hpp"
 #include "epoll.hpp"
@@ -42,11 +45,11 @@
 extern "C" {
 #include "network.h"
 #include "log.h"
+#include "io.h"
 }
 
 #include <signal.h>
-extern volatile sig_atomic_t pending_exit;
-extern void handle_signals(void);
+extern int gSignalFd;
 
 static std::map<int, IdentClient *> clientmap;
 
@@ -176,8 +179,6 @@ void epoll_init(int *sockets)
 void epoll_dispatch_work(void)
 {
     for (;;) {
-        handle_signals();
-
         int ret = epoll_wait(epollfd, events, max_ev_events, -1);
         if (ret == -1) {
             if (errno == EINTR)
@@ -185,10 +186,21 @@ void epoll_dispatch_work(void)
             else
                 suicide("epoll_wait failed");
         }
-        if (pending_exit == 1)
-            return;
         for (int i = 0; i < ret; ++i) {
             int fd = events[i].data.fd;
+            if (fd == gSignalFd) {
+                struct signalfd_siginfo si;
+                safe_read(gSignalFd, (char *)&si, sizeof si);
+                switch (si.ssi_signo) {
+                    case SIGTERM:
+                    case SIGINT:
+                        return;
+                    case SIGCHLD:
+                        while (waitpid(-1, NULL, WNOHANG) > 0);
+                        break;
+                }
+                continue;
+            }
             std::map<int, IdentClient *>::iterator iter = clientmap.find(fd);
             if (iter == clientmap.end()) {
                 if (events[i].events & EPOLLIN)
