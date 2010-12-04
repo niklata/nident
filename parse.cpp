@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 21:59:12 nk>
+ * Time-stamp: <2010-12-04 00:21:41 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -37,8 +37,8 @@
 #include <stdint.h>
 #include <pwd.h>
 
-#include "tiger.h"
 extern "C" {
+#include "cubehash.h"
 #include "log.h"
 }
 
@@ -488,8 +488,8 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
             sh << cp;
         sh >> hashstr;
         uint64_t result[3];
-        tiger(reinterpret_cast<const uint64_t *>(hashstr.c_str()),
-              hashstr.size(), result);
+        cubehash(192, reinterpret_cast<const BitSequence *>(hashstr.c_str()),
+                 hashstr.size() * 8, reinterpret_cast<BitSequence *>(&result));
         std::string res = compress_64_to_unix(result[1]);
         ss << "USERID:UNIX:" << res;
     }
