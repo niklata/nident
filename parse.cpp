@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-12-04 00:24:38 njk>
+ * Time-stamp: <2010-12-04 00:34:12 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -487,11 +487,10 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
         if (ci_.policy.isHashCP())
             sh << cp;
         sh >> hashstr;
-        uint64_t result[3];
-        cubehash(192, reinterpret_cast<const BitSequence *>(hashstr.c_str()),
+        uint64_t result;
+        cubehash(64, reinterpret_cast<const BitSequence *>(hashstr.c_str()),
                  hashstr.size() * 8, reinterpret_cast<BitSequence *>(&result));
-        std::string res = compress_64_to_unix(result[1]);
-        ss << "USERID:UNIX:" << res;
+        ss << "USERID:UNIX:" << compress_64_to_unix(result);
     }
     ss >> ret;
     return ret;
