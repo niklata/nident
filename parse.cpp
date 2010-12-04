@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-12-04 00:21:41 njk>
+ * Time-stamp: <2010-12-04 00:24:38 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -294,10 +294,10 @@ bool Parse::parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
         if (f.eof()) {
             break;
         } else if (f.bad()) {
-            std::cerr << "fatal io error fetching line of proc/net/tcp\n";
+            std::cerr << "fatal io error fetching line of " << fn << "\n";
             break;
         } else if (f.fail()) {
-            std::cerr << "non-fatal io error fetching line of proc/net/tcp\n";
+            std::cerr << "non-fatal io error fetching line of " << fn << "\n";
             break;
         }
 
