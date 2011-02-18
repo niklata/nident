@@ -13,7 +13,7 @@ link_directories ( ${Boost_LIBRARY_DIRS} )
 include_directories ( ${Boost_INCLUDE_DIRS} )
 
 set(NIDENT_SRCS
-  cubehash.c
+  blake256.c
   parse.cpp
   identclient.cpp
   epoll.cpp

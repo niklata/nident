@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-12-04 00:34:12 njk>
+ * Time-stamp: <2011-02-18 09:58:37 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -38,7 +38,7 @@
 #include <pwd.h>
 
 extern "C" {
-#include "cubehash.h"
+#include "blake256.h"
 #include "log.h"
 }
 
@@ -476,7 +476,7 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
         if (ci_.policy.isHashUID())
             sh << ti_.uid;
         if (ci_.policy.isHashIP()) {
-            char buf[32];
+            char buf[64];
             if (inet_ntop(AF_INET6, &ca, buf, sizeof buf))
                 sh << buf;
             else
@@ -487,10 +487,17 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
         if (ci_.policy.isHashCP())
             sh << cp;
         sh >> hashstr;
-        uint64_t result;
-        cubehash(64, reinterpret_cast<const BitSequence *>(hashstr.c_str()),
-                 hashstr.size() * 8, reinterpret_cast<BitSequence *>(&result));
-        ss << "USERID:UNIX:" << compress_64_to_unix(result);
+        union hash_result_t {
+            uint64_t u64[4];
+            uint8_t u8[32];
+        } result;
+        blake256_hash(result.u8,
+                      reinterpret_cast<const uint8_t *>(hashstr.c_str()),
+                      hashstr.size());
+        result.u64[0] ^= result.u64[1];
+        result.u64[0] ^= result.u64[2];
+        result.u64[0] ^= result.u64[3];
+        ss << "USERID:UNIX:" << compress_64_to_unix(result.u64[0]);
     }
     ss >> ret;
     return ret;
