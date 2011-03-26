@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2011-02-18 09:58:37 njk>
+ * Time-stamp: <2011-03-26 19:22:35 njk>
  *
  * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -391,8 +391,6 @@ struct in6_addr Parse::canon_ipv6(const std::string &ip, bool *ok)
     }
     if (ok)
         *ok = true;
-    unsigned int *idx;
-    idx = reinterpret_cast<unsigned int *>(&ret);
     return ret;
 }
 
