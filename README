@@ -1,6 +1,6 @@
 LICENSE
 -------
- (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
+ (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -28,9 +28,9 @@ LICENSE
 REQUIREMENTS
 ------------
 
-Linux kernel (tested: 2.6.36)
-C99 C compiler (tested: gcc 4.5)
-C++03 C++ compiler (tested: gcc 4.5)
+Linux kernel (tested: 2.6.36-2.6.38)
+C99 C compiler (tested: gcc 4.5-4.6)
+C++03 C++ compiler (tested: gcc 4.5-4.6)
 CMake (tested: 2.8.1)
 Boost (tested: 1.42)
 
@@ -38,9 +38,7 @@ PORTABILITY
 -----------
 
 nidentd could be ported to non-Linux systems, but will require new code
-to replace the /proc/net/tcp6? mechanism used in Linux.  epoll() is also
-Linux-specific and is used in nident, but replacing the event code
-with kqueue() or similar would not be difficult.
+to replace the /proc/net/tcp6? mechanism used in Linux.
 
 INTRODUCTION
 ------------
@@ -188,11 +186,3 @@ The fourth rule is a rather trusting one.  It will return the true username of
 a port's owner as long as the machine making the query is on the 192.168.x.x
 class B subnet.  This would be the default behavior of most common identds to
 all queries.
-
-BEHAVIOR NOTES
---------------
-
-nident defaults to allow 10 simultaneous server processes and a backlog of 30
-incoming connections.  These values may be changed at runtime via the -s
-(--servermax) and -b (--backlog) options.
-
