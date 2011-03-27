@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2011-03-27 11:26:04 nk>
+ * Time-stamp: <2011-03-27 19:44:09 nk>
  *
  * (c) 2004-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -139,7 +139,7 @@ int main(int argc, char** argv) {
 	    case 'h':
 		printf("nident %s, ident server.\n", NIDENT_VERSION);
 		printf(
-		    "Copyright (c) 2010 Nicholas J. Kain\n"
+		    "Copyright (c) 2010-2011 Nicholas J. Kain\n"
 		    "Usage: nident [OPTIONS]\n"
 		    "  -d, --detach                detach from TTY and daemonize (default)\n"
 		    "  -n, --nodetach              stay attached to TTY\n"
