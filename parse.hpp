@@ -1,7 +1,7 @@
 /* parse.hpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2010-11-06 21:59:43 nk>
+ * Time-stamp: <2011-03-27 00:59:15 nk>
  *
- * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,8 +31,7 @@
 #define PARSE_H_
 
 #include <string>
-
-#include <arpa/inet.h>
+#include <boost/asio.hpp>
 
 class Parse {
 public:
@@ -72,7 +71,7 @@ public:
     };
     struct ConfigItem {
         HostType type;
-        struct in6_addr host;
+        boost::asio::ip::address host;
         int mask;
         int low_lport;
         int high_lport;
@@ -86,9 +85,9 @@ public:
         }
     };
     struct ProcTcpItem {
-        struct in6_addr local_address_;
+        boost::asio::ip::address local_address_;
         int local_port_;
-        struct in6_addr remote_address_;
+        boost::asio::ip::address remote_address_;
         int remote_port_;
         int uid;
         ProcTcpItem() {
@@ -101,17 +100,22 @@ public:
         found_ti_ = false;
         found_ci_ = false;
     }
-    std::string get_response(struct in6_addr sa, int sp,
-                             struct in6_addr ca, int cp);
-    int parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
-                   struct in6_addr ca, int cp);
-    int parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
-                    struct in6_addr ca, int cp);
-    bool parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
-                   struct in6_addr ca, int cp);
+    std::string get_response(boost::asio::ip::address sa, int sp,
+                             boost::asio::ip::address ca, int cp);
+    int parse_tcp(const std::string &fn,
+                  boost::asio::ip::address sa, int sp,
+                  boost::asio::ip::address ca, int cp);
+    int parse_tcp6(const std::string &fn,
+                   boost::asio::ip::address sa, int sp,
+                   boost::asio::ip::address ca, int cp);
+    bool parse_cfg(const std::string &fn,
+                   boost::asio::ip::address sa, int sp,
+                   boost::asio::ip::address ca, int cp);
 private:
-    bool compare_ipv6(struct in6_addr ip, struct in6_addr mask, int msize);
-    struct in6_addr canon_ipv6(const std::string &ip, bool *ok = NULL);
+    bool compare_ip(boost::asio::ip::address ip,
+                    boost::asio::ip::address mask, int msize);
+    bool compare_ipv6(boost::asio::ip::address_v6::bytes_type ip,
+                      boost::asio::ip::address_v6::bytes_type mask, int msize);
     std::string compress_64_to_unix(uint64_t qword);
     bool found_ti_;
     ProcTcpItem ti_;

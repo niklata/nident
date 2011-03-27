@@ -1,7 +1,7 @@
 /* identclient.hpp - ident client request handling
- * Time-stamp: <2010-11-06 20:49:46 nk>
+ * Time-stamp: <2011-03-27 00:58:18 nk>
  *
- * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,14 +33,12 @@
 #include <string>
 #include <netdb.h>
 
-class IdentClient {
-    enum ParseState {
-        ParseInvalid,
-        ParseBadPort,
-        ParseServerPort,
-        ParseClientPort,
-        ParseDone
-    };
+#include <boost/asio.hpp>
+#include <boost/enable_shared_from_this.hpp>
+
+class IdentClient
+    : public boost::enable_shared_from_this<IdentClient>
+{
 public:
     enum IdentClientState {
         STATE_WAITIN,
@@ -48,39 +46,58 @@ public:
         STATE_WAITOUT,
         STATE_DONE
     };
-    enum HostType {
-        HostNone,
-        HostIP4,
-        HostIP6
+
+    IdentClient(boost::asio::io_service &io_service);
+
+    void start() { do_read(); }
+    boost::asio::ip::tcp::socket &socket() { return tcp_socket_; }
+
+private:
+    enum ParseState {
+        ParseInvalid,
+        ParseBadPort,
+        ParseServerPort,
+        ParseClientPort,
+        ParseDone
     };
 
-    const int fd_;
-    std::string inbuf_;
-    std::string outbuf_;
     IdentClientState state_;
+    boost::asio::ip::tcp::socket tcp_socket_;
+    boost::array<char, 4096> inBytes_;
+    std::string inbuf_;
+    bool writePending_;
+    std::string outbuf_;
 
-    HostType server_type_;
-    struct in6_addr server_address_;
-    HostType client_type_;
-    struct in6_addr client_address_;
-    std::string client_address_pretty_;
+    boost::asio::ip::address server_address_;
+    boost::asio::ip::address client_address_;
 
     int server_port_; // Port on the local machine this server is running on.
     int client_port_; // Port on the remote machine making the ident request.
 
-    IdentClient(int fd);
-    ~IdentClient();
-
+    void do_read();
+    void do_write();
+    void read_handler(const boost::system::error_code &ec,
+                      std::size_t bytes_xferred);
+    void write_handler(const boost::system::error_code &ec,
+                       std::size_t bytes_xferred);
     bool process_input();
     bool create_reply();
-    bool get_local_info();
-    bool get_peer_info();
-    bool process_output();
-private:
+    void write();
+
     ParseState parse_request();
-    bool decipher_addr(const struct sockaddr_storage &addr,
-                       struct in6_addr *addy, HostType *htype,
-                       std::string *addyp = NULL);
+};
+
+class ClientListener
+{
+public:
+    ClientListener(const boost::asio::ip::tcp::endpoint &endpoint);
+    const boost::asio::ip::tcp::acceptor &socket() { return acceptor_; }
+private:
+    boost::asio::ip::tcp::acceptor acceptor_;
+
+    void start_accept();
+    void accept_handler(boost::shared_ptr<IdentClient> conn,
+                        const boost::system::error_code &ec);
 };
 
 extern unsigned int max_client_bytes;

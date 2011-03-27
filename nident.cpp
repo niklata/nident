@@ -1,7 +1,7 @@
 /* nident.c - ident server
- * Time-stamp: <2010-12-01 00:51:49 njk>
+ * Time-stamp: <2011-03-26 23:54:01 nk>
  *
- * (c) 2004-2010 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2004-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,6 +30,7 @@
 #define NIDENT_VERSION "1.0"
 
 #include <string>
+#include <vector>
 
 #include <unistd.h>
 #include <stdio.h>
@@ -40,7 +41,6 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/stat.h>
-#include <sys/signalfd.h>
 #include <fcntl.h>
 #include <ctype.h>
 
@@ -51,7 +51,8 @@
 #include <errno.h>
 #include <getopt.h>
 
-#include "epoll.hpp"
+#include <boost/asio.hpp>
+
 #include "identclient.hpp"
 
 extern "C" {
@@ -66,16 +67,19 @@ extern "C" {
 #include "strlist.h"
 }
 
+boost::asio::io_service io_service;
+
 bool gParanoid = false;
 
-int gSignalFd;
+static void sighandler(int sig)
+{
+    exit(EXIT_SUCCESS);
+}
 
 static void fix_signals(void) {
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGCHLD);
-    sigaddset(&mask, SIGINT);
-    sigaddset(&mask, SIGTERM);
     sigaddset(&mask, SIGPIPE);
     sigaddset(&mask, SIGUSR1);
     sigaddset(&mask, SIGUSR2);
@@ -84,23 +88,27 @@ static void fix_signals(void) {
     sigaddset(&mask, SIGHUP);
     if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0)
 	suicide("sigprocmask failed");
-    gSignalFd = signalfd(-1, &mask, SFD_NONBLOCK);
-    if (gSignalFd < 0)
-	suicide("signalfd failed");
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof (struct sigaction));
+    sa.sa_handler = sighandler;
+    sigemptyset(&sa.sa_mask);
+    sigaddset(&sa.sa_mask, SIGINT);
+    sigaddset(&sa.sa_mask, SIGTERM);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
 }
 
 int main(int argc, char** argv) {
     int c, t, uid = 0, gid = 0, len;
     unsigned int port = 0;
-    int backlog = 30;
     std::string pidfile;
     char *p;
     struct passwd *pws;
     struct group *grp;
-    strlist_t *addrlist = NULL;
-    int *sockets = NULL;
+    std::vector<ClientListener *> listeners;
+    std::vector<std::string> addrlist;
 
-    max_ev_events = 4;
     gflags_log_name = const_cast<char *>("nident");
 
     while (1) {
@@ -110,8 +118,6 @@ int main(int argc, char** argv) {
 	    {"nodetach", 0, 0, 'n'},
 	    {"pidfile", 1, 0, 'f'},
 	    {"quiet", 0, 0, 'q'},
-	    {"max-events", 1, 0, 'e'},
-	    {"backlog", 1, 0, 'b'},
 	    {"max-bytes", 1, 0, 'B'},
 	    {"address", 1, 0, 'a'},
 	    {"port", 1, 0, 'p'},
@@ -123,7 +129,7 @@ int main(int argc, char** argv) {
 	    {0, 0, 0, 0}
 	};
 
-	c = getopt_long(argc, argv, "dnf:qe:b:B:a:p:ou:g:Phv",
+	c = getopt_long(argc, argv, "dnf:qB:a:p:ou:g:Phv",
 			long_options, &option_index);
 	if (c == -1)
 	    break;
@@ -137,10 +143,8 @@ int main(int argc, char** argv) {
 		    "Usage: nident [OPTIONS]\n"
 		    "  -d, --detach                detach from TTY and daemonize (default)\n"
 		    "  -n, --nodetach              stay attached to TTY\n"
-		    "  -q, --quiet                 don't print to std(out|err) or log\n"
-		    "  -e, --max-events            max events processed per epoll_wait\n");
+		    "  -q, --quiet                 don't print to std(out|err) or log\n");
 		printf(
-		    "  -b, --backlog               maximum simultaneous connections accepted\n"
 		    "  -B, --max-bytes             maximum number of bytes allowed from a client\n"
 		    "  -a, --address               address on which to listen (default all local)\n"
 		    "  -p, --port                  port on which to listen (only one allowed)\n"
@@ -193,10 +197,6 @@ int main(int argc, char** argv) {
 		gflags_quiet = 1;
 		break;
 
-	    case 'b':
-		backlog = atoi(optarg);
-		break;
-
 	    case 'B':
 		max_client_bytes = atoi(optarg);
 		if (max_client_bytes < 64)
@@ -215,7 +215,8 @@ int main(int argc, char** argv) {
 		break;
 
 	    case 'a':
-		add_to_strlist(&addrlist, optarg);
+		len = strlen(optarg);
+		addrlist.push_back(std::string(optarg, len));
 		break;
 
 	    case 'u':
@@ -245,10 +246,6 @@ int main(int argc, char** argv) {
 	    case 'P':
 		gParanoid = true;
 		break;
-
-	    case 'e':
-		max_ev_events = atoi(optarg);
-		break;
 	}
     }
 
@@ -266,28 +263,19 @@ int main(int argc, char** argv) {
     fix_signals();
     ncm_fix_env(uid, 0);
 
-    if (!addrlist)
-	sockets = tcp_server_socket("::", port, backlog);
-    else {
-	for (strlist_t *iter = addrlist; iter;
-	     iter = static_cast<strlist_t *>(iter->next)) {
-	    int *t;
-	    t = tcp_server_socket(iter->str, port, backlog);
-	    if (!sockets) {
-		sockets = t;
-		continue;
-	    }
-	    int newsize = sockets[0] + t[0] - 1;
-	    sockets = static_cast<int *>(xrealloc(sockets, newsize));
-	    for (int i = sockets[0], j = 1; i < newsize; ++i, ++j)
-		sockets[i] = t[j];
-	    sockets[0] = newsize;
-	    free(t);
+    if (!addrlist.size()) {
+	auto ep = boost::asio::ip::tcp::endpoint();
+	ep.port(port);
+	auto cl = new ClientListener(ep);
+	listeners.push_back(cl);
+    } else
+	for (auto i = addrlist.cbegin(); i != addrlist.cend(); ++i) {
+	    auto addy = boost::asio::ip::address::from_string(*i);
+	    auto ep = boost::asio::ip::tcp::endpoint(addy, port);
+	    auto cl = new ClientListener(ep);
+	    listeners.push_back(cl);
 	}
-	free_strlist(addrlist);
-    }
-    if (sockets == NULL)
-	suicide("unable to create any listen sockets");
+    addrlist.clear();
 
     if (uid != 0 || gid != 0)
 	drop_root(uid, gid);
@@ -295,9 +283,7 @@ int main(int argc, char** argv) {
     /* Cover our tracks... */
     pidfile.clear();
 
-    epoll_init(sockets);
-    epoll_add(gSignalFd);
-    epoll_dispatch_work();
+    io_service.run();
 
     exit(EXIT_SUCCESS);
 }

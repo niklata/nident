@@ -1,7 +1,7 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2010-12-04 00:19:08 njk>
+ * Time-stamp: <2011-03-27 00:58:03 nk>
  *
- * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,12 +31,12 @@
 #include <iostream>
 
 #include <unistd.h>
-#include <string.h> // memset
-
 #include <sys/types.h>
 #include <pwd.h>
 
-#include "epoll.hpp"
+#include <boost/lexical_cast.hpp>
+#include <boost/bind.hpp>
+
 #include "identclient.hpp"
 #include "parse.hpp"
 
@@ -44,66 +44,106 @@ extern "C" {
 #include "log.h"
 }
 
+namespace ba = boost::asio;
+
+extern ba::io_service io_service;
+
 extern bool gParanoid;
 unsigned int max_client_bytes = 128;
 
-IdentClient::IdentClient(int fd) : fd_(fd) {
+IdentClient::IdentClient(ba::io_service &io_service)
+        : tcp_socket_(io_service)
+{
     state_ = STATE_WAITIN;
-    server_type_ = HostNone;
-    client_type_ = HostNone;
-    server_port_ = -1;
-    client_port_ = -1;
+    writePending_ = false;
 }
 
-IdentClient::~IdentClient() {
-    if (state_ == STATE_WAITOUT)
-        epoll_unset_write(fd_);
-    epoll_del(fd_);
-    close(fd_);
+void IdentClient::do_read()
+{
+    tcp_socket_.async_read_some
+        (ba::buffer(inBytes_),
+         boost::bind(&IdentClient::read_handler, shared_from_this(),
+                     ba::placeholders::error,
+                     ba::placeholders::bytes_transferred));
+}
+
+void IdentClient::read_handler(const boost::system::error_code &ec,
+                                    std::size_t bytes_xferred)
+{
+    if (state_ != STATE_DONE && ec) {
+        std::cerr << "Client read error: "
+                  << boost::system::system_error(ec).what() << std::endl;
+        return;
+    }
+    if (!bytes_xferred)
+        return;
+    inbuf_.append(inBytes_.data(), bytes_xferred);
+    if (!process_input()) {
+        state_ = STATE_DONE;
+        tcp_socket_.cancel();
+        tcp_socket_.close();
+        return;
+    }
+    do_read();
+}
+
+void IdentClient::do_write()
+{
+    assert(!writePending_);
+    writePending_ = true;
+    ba::async_write(
+        tcp_socket_, ba::buffer(outbuf_),
+        boost::bind(&IdentClient::write_handler, shared_from_this(),
+                    ba::placeholders::error,
+                    ba::placeholders::bytes_transferred));
+}
+
+// State can change: STATE_WAITOUT -> STATE_DONE
+void IdentClient::write_handler(const boost::system::error_code &ec,
+                                     std::size_t bytes_xferred)
+{
+    writePending_ = false;
+    if (ec) {
+        std::cerr << "Client write error: "
+                  << boost::system::system_error(ec).what() << std::endl;
+        return;
+    }
+    outbuf_.erase(0, bytes_xferred);
+    if (outbuf_.size())
+        do_write();
+    else {
+        state_ = STATE_DONE;
+        tcp_socket_.cancel();
+        tcp_socket_.close();
+    }
+}
+
+void IdentClient::write()
+{
+    if (!writePending_ && state_ == STATE_GOTIN) {
+        state_ = STATE_WAITOUT;
+        do_write();
+    }
 }
 
 // Returns false if the object needs to be destroyed by the caller.
 // State can change: STATE_WAITIN -> STATE_GOTIN
 bool IdentClient::process_input()
 {
-    if (state_ != STATE_WAITIN) {
-        return false;
-    }
-    char buf[max_client_bytes];
-    memset(buf, 0, sizeof buf);
-    ssize_t len = 0;
-    while (len < max_client_bytes) {
-        ssize_t r = read(fd_, buf + len, (sizeof buf) - len);
-        if (r == 0)
-            break;
-        if (r == -1) {
-            if (errno == EINTR)
-                continue;
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                break;
-            log_line("fd %i: read() error %d", fd_, strerror(errno));
-            return false;
-        }
-        len += r;
-    }
-
-    // Remote end hung up.
-    if (len == 0)
+    // Only one request per session is answered.
+    if (state_ != STATE_WAITIN)
         return false;
 
-    for (int i = 0; i < len; ++i) {
-        if (buf[i] == '\n' || buf[i] == '\r') {
-            inbuf_ += buf[i];
-            state_ = STATE_GOTIN;
-            break;
-        }
-        if (inbuf_.size() + 1 > max_client_bytes) {
-            log_line("fd %i: flood from peer (more than %i bytes), closing",
-                     fd_, max_client_bytes);
-            return false;
-        }
-        inbuf_ += buf[i];
+    // See if client flooded us over several iterations of process_input().
+    if (inbuf_.size() > max_client_bytes)
+        return false;
+
+    size_t loc = inbuf_.find_first_of("\r\n");
+    if (loc != std::string::npos) {
+        inbuf_.erase(loc);
+        state_ = STATE_GOTIN;
     }
+
     if (state_ == STATE_GOTIN) {
         if (!create_reply())
             return false;
@@ -130,11 +170,9 @@ IdentClient::ParseState IdentClient::parse_request()
                     if (found_num)
                         found_ws_after_num = true;
                     continue;
-                case ',': {
-                    std::string sport = inbuf_.substr(prev_idx, i);
-                    std::stringstream ss;
-                    ss << sport;
-                    ss >> server_port_;
+                case ',':
+                    server_port_ = boost::lexical_cast<int>(
+                        inbuf_.substr(prev_idx, i));
                     if (server_port_ < 1 || server_port_ > 65535)
                         return ParseBadPort;
                     state = ParseClientPort;
@@ -142,7 +180,6 @@ IdentClient::ParseState IdentClient::parse_request()
                     found_num = false;
                     found_ws_after_num = false;
                     continue;
-                }
                 case '0': case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8': case '9':
                     if (found_num == false) {
@@ -185,100 +222,12 @@ IdentClient::ParseState IdentClient::parse_request()
     }
   eol:
     if (state == ParseClientPort && found_num) {
-        std::string cport = inbuf_.substr(prev_idx, i);
-        std::stringstream ss;
-        ss << cport;
-        ss >> client_port_;
+        client_port_ = boost::lexical_cast<int>(inbuf_.substr(prev_idx, i));
         if (client_port_ < 1 || client_port_ > 65535)
             return ParseBadPort;
         return ParseDone;
     }
     return ParseInvalid;
-}
-
-bool IdentClient::decipher_addr(const struct sockaddr_storage &addr,
-                                struct in6_addr *addy, HostType *htype,
-                                std::string *addyp)
-{
-    if (addr.ss_family == AF_INET) {
-        char hoststr[64];
-        struct sockaddr_in *s = (struct sockaddr_in *)&addr;
-        int r;
-        if (htype)
-            *htype = HostIP4;
-        if (!inet_ntop(AF_INET, &s->sin_addr, hoststr, sizeof hoststr)) {
-            log_line("inet_ntop (ipv4): %s", strerror(errno));
-            return false;
-        }
-        if (addyp)
-            *addyp = hoststr;
-        std::string hoststr6;
-        hoststr6 += "::ffff:";
-        hoststr6 += hoststr;
-        r = inet_pton(AF_INET6, hoststr6.c_str(), addy);
-        if (r == 0) {
-            log_line("inet_pton (ipv4): invalid address");
-            return false;
-        } else if (r < 0) {
-            log_line("inet_pton (ipv4): %s", strerror(errno));
-            return false;
-        }
-    } else if (addr.ss_family == AF_INET6) {
-        char hoststr[64];
-        struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
-        int r;
-        if (htype)
-            *htype = HostIP6;
-        if (!inet_ntop(AF_INET6, &s->sin6_addr, hoststr, sizeof hoststr)) {
-            log_line("inet_ntop (ipv6): %s", strerror(errno));
-            return false;
-        }
-        if (addyp)
-            *addyp = hoststr;
-        r = inet_pton(AF_INET6, hoststr, addy);
-        if (r == 0) {
-            log_line("inet_pton (ipv6): invalid address");
-            return false;
-        } else if (r < 0) {
-            log_line("inet_pton (ipv6): %s", strerror(errno));
-            return false;
-        }
-    } else {
-        log_line("getsockname(): returned unknown ss_family");
-        return false;
-    }
-    return true;
-}
-
-// Returns true if sock IP and port are found, else false.
-bool IdentClient::get_local_info()
-{
-    struct sockaddr_storage addr;
-    socklen_t len = sizeof addr;
-    if (getsockname(fd_, (struct sockaddr *)&addr, &len)) {
-        log_line("getsockname() error %s", strerror(errno));
-        return false;
-    }
-    if (decipher_addr(addr, &server_address_, &server_type_))
-        return true;
-    else
-        return false;
-}
-
-// Returns true if peer IP and port are found, else false.
-bool IdentClient::get_peer_info()
-{
-    struct sockaddr_storage addr;
-    socklen_t len = sizeof addr;
-    if (getpeername(fd_, (struct sockaddr *)&addr, &len)) {
-        log_line("getpeername() error %s", strerror(errno));
-        return false;
-    }
-    if (decipher_addr(addr, &client_address_, &client_type_,
-                      &client_address_pretty_))
-        return true;
-    else
-        return false;
 }
 
 // Forms a reply and schedules a write.
@@ -289,14 +238,10 @@ bool IdentClient::create_reply()
 
     outbuf_.clear();
 
-    if (!get_local_info())
-        return false;
-    if (!get_peer_info())
-        return false;
+    server_address_ = tcp_socket_.local_endpoint().address();
+    client_address_ = tcp_socket_.remote_endpoint().address();
 
-    if (client_type_ == HostNone || server_type_ == HostNone)
-        return false;
-    if (client_type_ != server_type_)
+    if (server_address_.is_v6() != client_address_.is_v6())
         return false;
 
     ParseState ps = parse_request();
@@ -310,12 +255,13 @@ bool IdentClient::create_reply()
     } else {
         Parse pa;
         int uid = -1;
-        if (client_type_ == HostIP4)
+        if (client_address_.is_v4()) {
             uid = pa.parse_tcp("/proc/net/tcp", server_address_, server_port_,
                                client_address_, client_port_);
-        if (client_type_ == HostIP6)
+        } else {
             uid = pa.parse_tcp6("/proc/net/tcp6", server_address_, server_port_,
                                 client_address_, client_port_);
+        }
         if (uid == -1) {
             if (gParanoid)
                 reply = "ERROR:UNKNOWN-ERROR";
@@ -344,35 +290,36 @@ bool IdentClient::create_reply()
     ss << server_port_ << "," << client_port_ << ":" << reply;
     ss >> outbuf_;
     outbuf_ += "\r\n";
-    epoll_set_write(fd_);
-    state_ = STATE_WAITOUT;
-    log_line("(%s) %d,%d -> %s", client_address_pretty_.c_str(),
+    write();
+    log_line("(%s) %d,%d -> %s", client_address_.to_string().c_str(),
              server_port_, client_port_, reply.c_str());
     return true;
 }
 
-// Returns false if the object needs to be destroyed by the caller.
-// State can change: STATE_WAITOUT -> STATE_DONE
-bool IdentClient::process_output()
+ClientListener::ClientListener(const ba::ip::tcp::endpoint &endpoint)
+        : acceptor_(io_service)
 {
-    while (outbuf_.size()) {
-        int written = write(fd_, outbuf_.c_str(), outbuf_.size());
-        if (written == 0)
-            break;
-        if (written == -1) {
-            if (errno == EINTR)
-                continue;
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                break;
-            log_line("fd %i: write() error %s", strerror(errno));
-            return false;
-        }
-        outbuf_.erase(0, written);
-    }
-    if (outbuf_.size() == 0) {
-        epoll_unset_write(fd_);
-        state_ = STATE_DONE;
-        return false;
-    }
-    return true;
+    acceptor_.open(endpoint.protocol());
+    acceptor_.set_option(ba::ip::tcp::acceptor::reuse_address(true));
+    acceptor_.bind(endpoint);
+    acceptor_.listen();
+    start_accept();
+}
+
+void ClientListener::start_accept()
+{
+    boost::shared_ptr<IdentClient> conn(
+        new IdentClient(acceptor_.io_service()));
+    acceptor_.async_accept(conn->socket(), boost::bind(
+                               &ClientListener::accept_handler, this,
+                               conn, ba::placeholders::error));
+}
+
+void ClientListener::accept_handler(boost::shared_ptr<IdentClient> conn,
+                                    const boost::system::error_code &ec)
+{
+    if (ec)
+        return;
+    conn->start();
+    start_accept();
 }

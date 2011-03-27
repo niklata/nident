@@ -1,7 +1,7 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2011-03-26 19:22:35 njk>
+ * Time-stamp: <2011-03-27 00:59:04 nk>
  *
- * (c) 2010 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,11 +42,13 @@ extern "C" {
 #include "log.h"
 }
 
+namespace ba = boost::asio;
+
 extern bool gParanoid;
 
 // Returns -1 if no match found, else the uid of the owner of the connection.
-int Parse::parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
-                     struct in6_addr ca, int cp)
+int Parse::parse_tcp(const std::string &fn, ba::ip::address sa, int sp,
+                     ba::ip::address ca, int cp)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
@@ -98,7 +100,7 @@ int Parse::parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
         if (boost::regex_match(l.c_str(), m, re)) {
             ProcTcpItem ti;
             std::stringstream as, bs, cs, ds, es, fs, gs, hs, ls, rs, us;
-            std::stringstream la6, ra6;
+            std::stringstream la4, ra4;
             unsigned int a, b, c, d, e, f, g, h;
 
             as << std::hex << m[4];
@@ -109,9 +111,9 @@ int Parse::parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
             cs >> c;
             ds << std::hex << m[1];
             ds >> d;
-            la6 << "0000:0000:0000:0000:0000:ffff:"
-                << a << "." << b << "." << c << "." << d;
-            ti.local_address_ = canon_ipv6(la6.str());
+
+            la4 << a << "." << b << "." << c << "." << d;
+            ti.local_address_ = ba::ip::address::from_string(la4.str());
             ls << std::hex << m[5] << m[6];
             ls >> ti.local_port_;
             es << std::hex << m[10];
@@ -122,17 +124,16 @@ int Parse::parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
             gs >> g;
             hs << std::hex << m[7];
             hs >> h;
-            ra6 << "0000:0000:0000:0000:0000:ffff:"
-                << e << "." << f << "." << g << "." << h;
-            ti.remote_address_ = canon_ipv6(ra6.str());
+            ra4 << e << "." << f << "." << g << "." << h;
+            ti.remote_address_ = ba::ip::address::from_string(ra4.str());
             rs << std::hex << m[11] << m[12];
             rs >> ti.remote_port_;
             us << m[13];
             us >> ti.uid;
             if (ti.remote_port_ == cp && ti.local_port_ == sp) {
-                if (memcmp(&ti.remote_address_, &ca, sizeof (struct in6_addr)))
+                if (ti.remote_address_ != ca)
                     continue;
-                if (memcmp(&ti.local_address_, &sa, sizeof (struct in6_addr)))
+                if (ti.local_address_ != sa)
                     continue;
                 found_ti_ = true;
                 ti_ = ti;
@@ -147,8 +148,8 @@ int Parse::parse_tcp(const std::string &fn, struct in6_addr sa, int sp,
 }
 
 // Returns -1 if no match found, else the uid of the owner of the connection.
-int Parse::parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
-                      struct in6_addr ca, int cp)
+int Parse::parse_tcp6(const std::string &fn, ba::ip::address sa, int sp,
+                      ba::ip::address ca, int cp)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
@@ -222,22 +223,22 @@ int Parse::parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
                 << m[8] << m[7] << ":" << m[6] << m[5] << ":"
                 << m[12] << m[11] << ":" << m[10] << m[9] << ":"
                 << m[16] << m[15] << ":" << m[14] << m[13];
-            ti.local_address_ = canon_ipv6(la6.str());
+            ti.local_address_ = ba::ip::address::from_string(la6.str());
             ls << std::hex << m[17] << m[18];
             ls >> ti.local_port_;
             ra6 << m[22] << m[21] << ":" << m[20] << m[19] << ":"
                 << m[26] << m[25] << ":" << m[24] << m[23] << ":"
                 << m[30] << m[29] << ":" << m[28] << m[27] << ":"
                 << m[34] << m[33] << ":" << m[32] << m[31];
-            ti.remote_address_ = canon_ipv6(ra6.str());
+            ti.remote_address_ = ba::ip::address::from_string(ra6.str());
             rs << std::hex << m[35] << m[36];
             rs >> ti.remote_port_;
             us << m[37];
             us >> ti.uid;
             if (ti.remote_port_ == cp && ti.local_port_ == sp) {
-                if (memcmp(&ti.remote_address_, &ca, sizeof (struct in6_addr)))
+                if (ti.remote_address_ != ca)
                     continue;
-                if (memcmp(&ti.local_address_, &sa, sizeof (struct in6_addr)))
+                if (ti.local_address_ != sa)
                     continue;
                 found_ti_ = true;
                 ti_ = ti;
@@ -252,8 +253,8 @@ int Parse::parse_tcp6(const std::string &fn, struct in6_addr sa, int sp,
 }
 
 // XXX: extend config format to mask by local address?
-bool Parse::parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
-                      struct in6_addr ca, int cp)
+bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
+                      ba::ip::address ca, int cp)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
@@ -310,13 +311,10 @@ bool Parse::parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
 
             if (boost::regex_match(hoststr.c_str(), n, re6)) {
                 ci.type = HostIP6;
-                ci.host = canon_ipv6(hoststr);
+                ci.host = ba::ip::address::from_string(hoststr);
             } else if (boost::regex_match(hoststr.c_str(), n, re4)) {
-                std::string tmpstr;
                 ci.type = HostIP4;
-                tmpstr += "::ffff:";
-                tmpstr += hoststr;
-                ci.host = canon_ipv6(tmpstr);
+                ci.host = ba::ip::address::from_string(hoststr);
             } else if (boost::regex_match(hoststr.c_str(), n, rehost)) {
                 ci.type = HostName;
                 // XXX support hostnames in config file
@@ -361,7 +359,7 @@ bool Parse::parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
                 continue;
             if (ci.high_rport != -1 && cp > ci.high_rport)
                 continue;
-            if (!compare_ipv6(ca, ci.host, ci.mask == -1 ? 0 : ci.mask))
+            if (!compare_ip(ca, ci.host, ci.mask == -1 ? 0 : ci.mask))
                 continue;
             found_ci_ = true;
             ci_ = ci;
@@ -373,30 +371,35 @@ bool Parse::parse_cfg(const std::string &fn, struct in6_addr sa, int sp,
     return found_ci_;
 }
 
-// Forms a proper ipv6 address lacking '::' and '.'
-struct in6_addr Parse::canon_ipv6(const std::string &ip, bool *ok)
+bool Parse::compare_ip(ba::ip::address ip, ba::ip::address mask, int msize)
 {
-    struct in6_addr ret;
-    int r;
-
-    r = inet_pton(AF_INET6, ip.c_str(), &ret);
-    if (r == 0) {
-        if (ok)
-            *ok = false;
-        std::cerr << "canon_ipv6: not in presentation format\n";
-    } else if (r < 0) {
-        if (ok)
-            *ok = false;
-        std::cerr << "canon_ipv6: inet_pton() error " << strerror(errno) << "\n";
+    if (ip.is_v4()) {
+        if (mask.is_v4()) {
+            auto ip6 = ba::ip::address_v6::v4_compatible(ip.to_v4());
+            auto mask6 = ba::ip::address_v6::v4_compatible(mask.to_v4());
+            return compare_ipv6(ip6.to_bytes(), mask6.to_bytes(), 96 + msize);
+        } else {
+            auto ip6 = ba::ip::address_v6::v4_compatible(ip.to_v4());
+            return compare_ipv6(ip6.to_bytes(), mask.to_v6().to_bytes(), msize);
+        }
+    } else {
+        if (mask.is_v6()) {
+            return compare_ipv6(ip.to_v6().to_bytes(),
+                                mask.to_v6().to_bytes(), msize);
+        } else {
+            auto mask6 = ba::ip::address_v6::v4_compatible(mask.to_v4());
+            return compare_ipv6(ip.to_v6().to_bytes(),
+                                mask6.to_bytes(), 96 + msize);
+        }
     }
-    if (ok)
-        *ok = true;
-    return ret;
 }
 
-bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
-                         int msize)
+bool Parse::compare_ipv6(ba::ip::address_v6::bytes_type ip,
+                         ba::ip::address_v6::bytes_type mask, int msize)
 {
+    if (msize > 128 || msize < 0)
+        return false;
+
     uint64_t *idx, *idxm;
     idx = reinterpret_cast<uint64_t *>(&ip);
     idxm = reinterpret_cast<uint64_t *>(&mask);
@@ -413,9 +416,6 @@ bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
     uint64_t ma = idxm[0];
     uint64_t mb = idxm[1];
 #endif
-    char buf[32];
-    inet_ntop(AF_INET6, &ip, buf, sizeof buf);
-    inet_ntop(AF_INET6, &mask, buf, sizeof buf);
     int incl_qwords = msize / 64;
     int incl_bits = msize % 64;
 
@@ -441,8 +441,8 @@ bool Parse::compare_ipv6(struct in6_addr ip, struct in6_addr mask,
         return false;
 }
 
-std::string Parse::get_response(struct in6_addr sa, int sp,
-                                struct in6_addr ca, int cp)
+std::string
+Parse::get_response(ba::ip::address sa, int sp, ba::ip::address ca, int cp)
 {
     std::stringstream ss;
     std::string ret;
@@ -473,13 +473,8 @@ std::string Parse::get_response(struct in6_addr sa, int sp,
         std::string hashstr;
         if (ci_.policy.isHashUID())
             sh << ti_.uid;
-        if (ci_.policy.isHashIP()) {
-            char buf[64];
-            if (inet_ntop(AF_INET6, &ca, buf, sizeof buf))
-                sh << buf;
-            else
-                std::cerr << "inet_ntop(): failed for hash ip";
-        }
+        if (ci_.policy.isHashIP())
+            sh << ca;
         if (ci_.policy.isHashSP())
             sh << sp;
         if (ci_.policy.isHashCP())
