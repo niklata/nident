@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2011-03-27 00:59:04 nk>
+ * Time-stamp: <2011-03-27 12:48:04 nk>
  *
  * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -47,8 +47,8 @@ namespace ba = boost::asio;
 extern bool gParanoid;
 
 // Returns -1 if no match found, else the uid of the owner of the connection.
-int Parse::parse_tcp(const std::string &fn, ba::ip::address sa, int sp,
-                     ba::ip::address ca, int cp)
+int Parse::parse_tcp(const std::string &fn, ba::ip::address_v4 sa, int sp,
+                     ba::ip::address_v4 ca, int cp)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
@@ -131,10 +131,13 @@ int Parse::parse_tcp(const std::string &fn, ba::ip::address sa, int sp,
             us << m[13];
             us >> ti.uid;
             if (ti.remote_port_ == cp && ti.local_port_ == sp) {
-                if (ti.remote_address_ != ca)
+                std::cout << "tcp: testing ca: " << ca.to_string() << std::endl;
+                if (ti.remote_address_.to_v4() != ca)
                     continue;
-                if (ti.local_address_ != sa)
+                std::cout << "tcp: testing sa: " << sa.to_string() << std::endl;
+                if (ti.local_address_.to_v4() != sa)
                     continue;
+                std::cout << "tcp: passed!" << std::endl;
                 found_ti_ = true;
                 ti_ = ti;
                 break;
@@ -148,8 +151,8 @@ int Parse::parse_tcp(const std::string &fn, ba::ip::address sa, int sp,
 }
 
 // Returns -1 if no match found, else the uid of the owner of the connection.
-int Parse::parse_tcp6(const std::string &fn, ba::ip::address sa, int sp,
-                      ba::ip::address ca, int cp)
+int Parse::parse_tcp6(const std::string &fn, ba::ip::address_v6 sa, int sp,
+                      ba::ip::address_v6 ca, int cp)
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
@@ -236,10 +239,13 @@ int Parse::parse_tcp6(const std::string &fn, ba::ip::address sa, int sp,
             us << m[37];
             us >> ti.uid;
             if (ti.remote_port_ == cp && ti.local_port_ == sp) {
-                if (ti.remote_address_ != ca)
+                std::cout << "tcp6: testing ca: " << ca.to_string() << std::endl;
+                if (ti.remote_address_.to_v6() != ca)
                     continue;
-                if (ti.local_address_ != sa)
+                std::cout << "tcp6: testing sa: " << sa.to_string() << std::endl;
+                if (ti.local_address_.to_v6() != sa)
                     continue;
+                std::cout << "tcp6: passed!" << std::endl;
                 found_ti_ = true;
                 ti_ = ti;
                 break;
@@ -374,22 +380,33 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
 bool Parse::compare_ip(ba::ip::address ip, ba::ip::address mask, int msize)
 {
     if (ip.is_v4()) {
+        std::cout << "compare_ip: ip=v4";
         if (mask.is_v4()) {
-            auto ip6 = ba::ip::address_v6::v4_compatible(ip.to_v4());
-            auto mask6 = ba::ip::address_v6::v4_compatible(mask.to_v4());
+            std::cout << " mask=v4" << std::endl;
+            auto ip6 = ba::ip::address_v6::v4_mapped(ip.to_v4());
+            auto mask6 = ba::ip::address_v6::v4_mapped(mask.to_v4());
             return compare_ipv6(ip6.to_bytes(), mask6.to_bytes(), 96 + msize);
         } else {
-            auto ip6 = ba::ip::address_v6::v4_compatible(ip.to_v4());
+            std::cout << " mask=v6" << std::endl;
+            auto ip6 = ba::ip::address_v6::v4_mapped(ip.to_v4());
             return compare_ipv6(ip6.to_bytes(), mask.to_v6().to_bytes(), msize);
         }
     } else {
+        std::cout << "compare_ip: ip=v6";
         if (mask.is_v6()) {
+            std::cout << " mask=v6" << std::endl;
             return compare_ipv6(ip.to_v6().to_bytes(),
                                 mask.to_v6().to_bytes(), msize);
         } else {
-            auto mask6 = ba::ip::address_v6::v4_compatible(mask.to_v4());
-            return compare_ipv6(ip.to_v6().to_bytes(),
-                                mask6.to_bytes(), 96 + msize);
+            if (ip.to_v6().is_v4_mapped()) {
+                std::cout << " mask=v4-mapped" << std::endl;
+                auto mask6 = ba::ip::address_v6::v4_mapped(mask.to_v4());
+                return compare_ipv6(ip.to_v6().to_bytes(), mask6.to_bytes(),
+                                    96 + msize);
+            } else {
+                std::cout << " mask=v4 is always false" << std::endl;
+                return false;
+            }
         }
     }
 }
@@ -404,20 +421,18 @@ bool Parse::compare_ipv6(ba::ip::address_v6::bytes_type ip,
     idx = reinterpret_cast<uint64_t *>(&ip);
     idxm = reinterpret_cast<uint64_t *>(&mask);
 
-    // these are stored in host byte order, not network byte order
-#ifndef __BIG_ENDIAN__
-    uint64_t b = idx[0];
-    uint64_t a = idx[1];
-    uint64_t mb = idxm[0];
-    uint64_t ma = idxm[1];
-#else
-    uint64_t a = idx[0];
+    // these are stored in network byte order, not host byte order
     uint64_t b = idx[1];
-    uint64_t ma = idxm[0];
+    uint64_t a = idx[0];
     uint64_t mb = idxm[1];
-#endif
+    uint64_t ma = idxm[0];
+
     int incl_qwords = msize / 64;
     int incl_bits = msize % 64;
+
+    std::cout << "msize = " << msize
+              << " incl_qwords = " << incl_qwords << " incl_bits = "
+              << incl_bits << std::endl;
 
     if (incl_qwords == 0 && incl_bits == 0) { // wildcard mask
         return true;

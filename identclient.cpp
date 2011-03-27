@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2011-03-27 00:58:03 nk>
+ * Time-stamp: <2011-03-27 12:55:14 nk>
  *
  * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -34,7 +34,6 @@
 #include <sys/types.h>
 #include <pwd.h>
 
-#include <boost/lexical_cast.hpp>
 #include <boost/bind.hpp>
 
 #include "identclient.hpp"
@@ -170,9 +169,11 @@ IdentClient::ParseState IdentClient::parse_request()
                     if (found_num)
                         found_ws_after_num = true;
                     continue;
-                case ',':
-                    server_port_ = boost::lexical_cast<int>(
-                        inbuf_.substr(prev_idx, i));
+                case ',': {
+                    std::string sport = inbuf_.substr(prev_idx, i);
+                    std::stringstream ss;
+                    ss << sport;
+                    ss >> server_port_;
                     if (server_port_ < 1 || server_port_ > 65535)
                         return ParseBadPort;
                     state = ParseClientPort;
@@ -180,6 +181,7 @@ IdentClient::ParseState IdentClient::parse_request()
                     found_num = false;
                     found_ws_after_num = false;
                     continue;
+                }
                 case '0': case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8': case '9':
                     if (found_num == false) {
@@ -222,7 +224,10 @@ IdentClient::ParseState IdentClient::parse_request()
     }
   eol:
     if (state == ParseClientPort && found_num) {
-        client_port_ = boost::lexical_cast<int>(inbuf_.substr(prev_idx, i));
+        std::string cport = inbuf_.substr(prev_idx, i);
+        std::stringstream ss;
+        ss << cport;
+        ss >> client_port_;
         if (client_port_ < 1 || client_port_ > 65535)
             return ParseBadPort;
         return ParseDone;
@@ -256,11 +261,20 @@ bool IdentClient::create_reply()
         Parse pa;
         int uid = -1;
         if (client_address_.is_v4()) {
-            uid = pa.parse_tcp("/proc/net/tcp", server_address_, server_port_,
-                               client_address_, client_port_);
+            uid = pa.parse_tcp("/proc/net/tcp",
+                               server_address_.to_v4(), server_port_,
+                               client_address_.to_v4(), client_port_);
         } else {
-            uid = pa.parse_tcp6("/proc/net/tcp6", server_address_, server_port_,
-                                client_address_, client_port_);
+            ba::ip::address_v6 ca6 = client_address_.to_v6();
+            if (ca6.is_v4_mapped()) {
+                ba::ip::address_v6 sa6 = server_address_.to_v6();
+                uid = pa.parse_tcp("/proc/net/tcp", sa6.to_v4(), server_port_,
+                                   ca6.to_v4(), client_port_);
+            } else {
+                uid = pa.parse_tcp6("/proc/net/tcp6",
+                                    server_address_.to_v6(), server_port_,
+                                    client_address_.to_v6(), client_port_);
+            }
         }
         if (uid == -1) {
             if (gParanoid)

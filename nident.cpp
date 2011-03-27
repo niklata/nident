@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2011-03-27 01:40:00 nk>
+ * Time-stamp: <2011-03-27 11:26:04 nk>
  *
  * (c) 2004-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -264,8 +264,7 @@ int main(int argc, char** argv) {
     ncm_fix_env(uid, 0);
 
     if (!addrlist.size()) {
-	auto ep = boost::asio::ip::tcp::endpoint();
-	ep.port(port);
+	auto ep = boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v6(), port);
 	auto cl = new ClientListener(ep);
 	listeners.push_back(cl);
     } else
