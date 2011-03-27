@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2011-03-26 23:54:01 nk>
+ * Time-stamp: <2011-03-27 01:40:00 nk>
  *
  * (c) 2004-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
 	    case 'v':
 		printf("nident %s, ident server.\n", NIDENT_VERSION);
 		printf(
-		    "Copyright (c) 2010 Nicholas J. Kain\n"
+		    "Copyright (c) 2010-2011 Nicholas J. Kain\n"
 		    "All rights reserved.\n\n"
 		    "Redistribution and use in source and binary forms, with or without\n"
 		    "modification, are permitted provided that the following conditions are met:\n\n"
