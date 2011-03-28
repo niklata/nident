@@ -27,4 +27,4 @@ add_executable(nident ${NIDENT_SRCS})
 target_link_libraries(nident ${Boost_REGEX_LIBRARY} ${Boost_SYSTEM_LIBRARY} ncmlib)
 
 add_executable(nl-test ${NLTEST_SRCS})
-target_link_libraries(nl-test ${Boost_LIBRARIES} mnl)
+target_link_libraries(nl-test ${Boost_LIBRARIES})

@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
-#include <libmnl/libmnl.h>
 #include <linux/inet_diag.h>
 #include <linux/rtnetlink.h>
 
@@ -72,7 +71,6 @@ int create_bc(char *bcbase, unsigned char *sabytes, int salen, uint16_t sport,
 
 int main(int argc, const char *argv[])
 {
-    struct mnl_socket *nl;
     std::string sastr, dastr;
     unsigned short sp, dp;
 
@@ -148,21 +146,38 @@ int main(int argc, const char *argv[])
         dalen = 16;
     int bclen = bc_size(salen, dalen);
 
-    nl = mnl_socket_open(NETLINK_INET_DIAG);
-    if (nl == NULL) {
-        perror("mnl_socket_open");
+    int fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_INET_DIAG);
+    if (fd < 0) {
+        perror("socket");
         exit(EXIT_FAILURE);
     }
 
-    if (mnl_socket_bind(nl, 0, MNL_SOCKET_AUTOPID) < 0) {
-        perror("mnl_socket_bind");
+    struct sockaddr_nl nladdr;
+    memset(&nladdr, 0, sizeof nladdr);
+    nladdr.nl_family = AF_NETLINK;
+
+    if (bind(fd, (struct sockaddr *)&nladdr, sizeof nladdr) < 0) {
+        perror("bind");
         exit(EXIT_FAILURE);
     }
-    unsigned int portid = mnl_socket_get_portid(nl);
+    socklen_t nladdr_len = sizeof nladdr;
+    if (getsockname(fd, (struct sockaddr *)&nladdr, &nladdr_len) < 0) {
+        perror("getsockname");
+        exit(EXIT_FAILURE);
+    }
+    if (nladdr_len != sizeof nladdr) {
+        std::cerr << "getsockname address length mismatch" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    if (nladdr.nl_family != AF_NETLINK) {
+        std::cerr << "getsockname address type mismatch" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    unsigned int portid = nladdr.nl_pid;
     unsigned int seq;
 
     struct nlmsghdr *nlh;
-    struct sockaddr_nl nladdr;
     struct {
         struct nlmsghdr nlh;
         struct inet_diag_req r;
@@ -171,23 +186,21 @@ int main(int argc, const char *argv[])
     struct msghdr msg;
     struct rtattr rta;
 
-    memset(&nladdr, 0, sizeof(nladdr));
+    memset(&nladdr, 0, sizeof nladdr);
     nladdr.nl_family = AF_NETLINK;
 
-    memset(iov, 0, sizeof iov);
-
-    req.nlh.nlmsg_len = sizeof(req);
+    req.nlh.nlmsg_len = sizeof req;
     req.nlh.nlmsg_type = TCPDIAG_GETSOCK;
     req.nlh.nlmsg_flags = NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST;
     req.nlh.nlmsg_pid = portid;
     req.nlh.nlmsg_seq = seq = time(NULL);
-    memset(&req.r, 0, sizeof(req.r));
+    memset(&req.r, 0, sizeof req.r);
     req.r.idiag_family = AF_INET;
     req.r.idiag_states = TCPF_ESTABLISHED;
     req.r.idiag_ext = (1 << (INET_DIAG_INFO-1));
 
     iov[0].iov_base = &req;
-    iov[0].iov_len = sizeof(req);
+    iov[0].iov_len = sizeof req;
     char *bcbuf = new char[bclen];
     memset(bcbuf, 0, bclen);
     if (salen == 4) {
@@ -200,36 +213,47 @@ int main(int argc, const char *argv[])
     rta.rta_type = INET_DIAG_REQ_BYTECODE;
     rta.rta_len = RTA_LENGTH(bclen);
     iov[1].iov_base = &rta;
-    iov[1].iov_len = sizeof(rta);
+    iov[1].iov_len = sizeof rta;
     iov[2].iov_base = bcbuf;
     iov[2].iov_len = bclen;
     req.nlh.nlmsg_len += RTA_LENGTH(bclen);
 
     memset(&msg, 0, sizeof msg);
     msg.msg_name = (void*)&nladdr;
-    msg.msg_namelen = sizeof(nladdr);
+    msg.msg_namelen = sizeof nladdr;
     msg.msg_iov = iov;
     msg.msg_iovlen = 3;
 
-    if (sendmsg(mnl_socket_get_fd(nl), &msg, 0) < 0)
+    if (sendmsg(fd, &msg, 0) < 0)
         return -1;
 
     delete[] bcbuf;
 
     char buf[getpagesize()];
-    int rbytes = mnl_socket_recvfrom(nl, buf, sizeof buf);
-    if (rbytes == -1) {
-        perror("mnl_socket_recvfrom");
+    iov[0].iov_base = buf;
+    iov[0].iov_len = sizeof buf;
+    msg.msg_iov = iov;
+    msg.msg_iovlen = 1;
+
+    int rbytes = recvmsg(fd, &msg, 0);
+    if (rbytes < 0) {
+        perror("recvmsg");
         exit(EXIT_FAILURE);
     }
 
     nlh = reinterpret_cast<struct nlmsghdr *>(buf);
 
-    if (mnl_nlmsg_ok(nlh, rbytes)) {
-        if (!mnl_nlmsg_portid_ok(nlh, portid))
+    if (rbytes >= (int)sizeof(struct nlmsghdr) &&
+        nlh->nlmsg_len >= sizeof(struct nlmsghdr) &&
+        (int)nlh->nlmsg_len <= rbytes) {
+        if (nlh->nlmsg_pid != portid) {
+            std::cerr << "bad portid: " << nlh->nlmsg_pid << "!=" << portid << std::endl;
             goto badmsg;
-        if (!mnl_nlmsg_seq_ok(nlh, seq))
+        }
+        if (nlh->nlmsg_seq != seq) {
+            std::cerr << "bad seq: " << seq << std::endl;
             goto badmsg;
+        }
 
         if (nlh->nlmsg_type == TCPDIAG_GETSOCK) {
             struct inet_diag_msg *r = (struct inet_diag_msg *)NLMSG_DATA(nlh);
@@ -260,7 +284,7 @@ int main(int argc, const char *argv[])
     }
   badmsg:
 
-    mnl_socket_close(nl);
+    close(fd);
 
     return 0;
 }
