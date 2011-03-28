@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2011-03-27 12:55:14 nk>
+ * Time-stamp: <2011-03-28 07:54:15 nk>
  *
  * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -38,6 +38,7 @@
 
 #include "identclient.hpp"
 #include "parse.hpp"
+#include "netlink.hpp"
 
 extern "C" {
 #include "log.h"
@@ -258,24 +259,9 @@ bool IdentClient::create_reply()
         log_line("Request parse incomplete: should never happen.");
         return false;
     } else {
-        Parse pa;
-        int uid = -1;
-        if (client_address_.is_v4()) {
-            uid = pa.parse_tcp("/proc/net/tcp",
-                               server_address_.to_v4(), server_port_,
-                               client_address_.to_v4(), client_port_);
-        } else {
-            ba::ip::address_v6 ca6 = client_address_.to_v6();
-            if (ca6.is_v4_mapped()) {
-                ba::ip::address_v6 sa6 = server_address_.to_v6();
-                uid = pa.parse_tcp("/proc/net/tcp", sa6.to_v4(), server_port_,
-                                   ca6.to_v4(), client_port_);
-            } else {
-                uid = pa.parse_tcp6("/proc/net/tcp6",
-                                    server_address_.to_v6(), server_port_,
-                                    client_address_.to_v6(), client_port_);
-            }
-        }
+        Netlink nl;
+        int uid = nl.get_tcp_uid(server_address_, server_port_,
+                                 client_address_, client_port_);
         if (uid == -1) {
             if (gParanoid)
                 reply = "ERROR:UNKNOWN-ERROR";
@@ -284,12 +270,14 @@ bool IdentClient::create_reply()
         } else {
             struct passwd *pw = getpwuid(uid);
             if (pw && pw->pw_dir) {
+                Parse pa;
                 std::string path(pw->pw_dir);
                 path += "/.ident";
                 if (pa.parse_cfg(path, server_address_, server_port_,
                                  client_address_, client_port_))
                     reply = pa.get_response(server_address_, server_port_,
-                                            client_address_, client_port_);
+                                            client_address_, client_port_,
+                                            uid);
             }
         }
         if (!reply.size()) {

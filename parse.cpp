@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2011-03-27 13:17:31 nk>
+ * Time-stamp: <2011-03-28 08:09:54 nk>
  *
  * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -46,212 +46,6 @@ namespace ba = boost::asio;
 
 extern bool gParanoid;
 
-// Returns -1 if no match found, else the uid of the owner of the connection.
-int Parse::parse_tcp(const std::string &fn, ba::ip::address_v4 sa, int sp,
-                     ba::ip::address_v4 ca, int cp)
-{
-    std::string l;
-    std::ifstream f(fn, std::ifstream::in);
-    boost::regex re;
-    boost::cmatch m;
-
-    if (f.fail() || f.bad() || f.eof()) {
-        std::cerr << "failed to open file: '" << fn << "'";
-        goto out1;
-    }
-
-    // skip the header
-    std::getline(f, l);
-    if (f.eof()) {
-        std::cerr << "no tcp connections\n";
-        goto out;
-    } else if (f.bad()) {
-        std::cerr << "fatal io error getting first line of proc/net/tcp\n";
-        goto out;
-    } else if (f.fail()) {
-        std::cerr << "non-fatal io error getting first line of proc/net/tcp\n";
-        goto out;
-    }
-
-    // sl local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid
-    // 0: 00000000:2383 00000000:0000 0A 00000000:00000000 00:00000000 00000000   109
-    re.assign("\\s*\\d+:" // sl
-              "\\s+([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2}):([0-9a-fA-F]{2})([0-9a-fA-F]{2})" // local
-              "\\s+([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2}):([0-9a-fA-F]{2})([0-9a-fA-F]{2})" // remote
-              "\\s+[0-9a-fA-F]{2}" // st
-              "\\s+[0-9a-fA-F]{8}:[0-9a-fA-F]{8}" // tx_queue:rx_queue
-              "\\s+[0-9a-fA-F]{2}:[0-9a-fA-F]{8}" // tr:tm->when
-              "\\s+[0-9a-fA-F]{8}" // retrnsmt
-              "\\s+(\\d+)" // uid
-              "\\s+\\d+.*"); // timeout
-
-    while (1) {
-        std::getline(f, l);
-        if (f.eof()) {
-            break;
-        } else if (f.bad()) {
-            std::cerr << "fatal io error fetching line of proc/net/tcp\n";
-            break;
-        } else if (f.fail()) {
-            std::cerr << "non-fatal io error fetching line of proc/net/tcp\n";
-            break;
-        }
-
-        if (boost::regex_match(l.c_str(), m, re)) {
-            ProcTcpItem ti;
-            std::stringstream as, bs, cs, ds, es, fs, gs, hs, ls, rs, us;
-            std::stringstream la4, ra4;
-            unsigned int a, b, c, d, e, f, g, h;
-
-            as << std::hex << m[4];
-            as >> a;
-            bs << std::hex << m[3];
-            bs >> b;
-            cs << std::hex << m[2];
-            cs >> c;
-            ds << std::hex << m[1];
-            ds >> d;
-
-            la4 << a << "." << b << "." << c << "." << d;
-            ti.local_address_ = ba::ip::address::from_string(la4.str());
-            ls << std::hex << m[5] << m[6];
-            ls >> ti.local_port_;
-            es << std::hex << m[10];
-            es >> e;
-            fs << std::hex << m[9];
-            fs >> f;
-            gs << std::hex << m[8];
-            gs >> g;
-            hs << std::hex << m[7];
-            hs >> h;
-            ra4 << e << "." << f << "." << g << "." << h;
-            ti.remote_address_ = ba::ip::address::from_string(ra4.str());
-            rs << std::hex << m[11] << m[12];
-            rs >> ti.remote_port_;
-            us << m[13];
-            us >> ti.uid;
-            if (ti.remote_port_ == cp && ti.local_port_ == sp) {
-                if (ti.remote_address_.to_v4() != ca)
-                    continue;
-                if (ti.local_address_.to_v4() != sa)
-                    continue;
-                found_ti_ = true;
-                ti_ = ti;
-                break;
-            }
-        }
-    }
-  out:
-    f.close();
-  out1:
-    return ti_.uid;
-}
-
-// Returns -1 if no match found, else the uid of the owner of the connection.
-int Parse::parse_tcp6(const std::string &fn, ba::ip::address_v6 sa, int sp,
-                      ba::ip::address_v6 ca, int cp)
-{
-    std::string l;
-    std::ifstream f(fn, std::ifstream::in);
-    boost::regex re;
-    boost::cmatch m;
-
-    if (f.fail() || f.bad() || f.eof()) {
-        std::cerr << "failed to open file: '" << fn << "'";
-        goto out1;
-    }
-
-    // skip the header
-    std::getline(f, l);
-    if (f.eof()) {
-        std::cerr << "no tcp connections\n";
-        goto out;
-    } else if (f.bad()) {
-        std::cerr << "fatal io error getting first line of proc/net/tcp\n";
-        goto out;
-    } else if (f.fail()) {
-        std::cerr << "non-fatal io error getting first line of proc/net/tcp\n";
-        goto out;
-    }
-
-    // sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-    // 12: 700401200000B4E20000000001000000:D063 28F1072601054000EFBEADDECCCCFECA:1A29 01 00000000:00000000 02:00053FAD 00000000  1000        0 4039830 2 ffff
-    re.assign("\\s*\\d+:\\s+" // sl
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              ":([0-9a-fA-F]{2})([0-9a-fA-F]{2})" // local
-              "\\s+"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              "([0-9a-fA-F]{2})([0-9a-fA-F]{2})"
-              ":([0-9a-fA-F]{2})([0-9a-fA-F]{2})" // remote
-              "\\s+[0-9a-fA-F]{2}" // st
-              "\\s+[0-9a-fA-F]{8}:[0-9a-fA-F]{8}" // tx_queue:rx_queue
-              "\\s+[0-9a-fA-F]{2}:[0-9a-fA-F]{8}" // tr:tm->when
-              "\\s+[0-9a-fA-F]{8}" // retrnsmt
-              "\\s+(\\d+)" // uid
-              "\\s+\\d+.*"); // timeout
-
-    while (1) {
-        std::getline(f, l);
-        if (f.eof()) {
-            break;
-        } else if (f.bad()) {
-            std::cerr << "fatal io error fetching line of proc/net/tcp\n";
-            break;
-        } else if (f.fail()) {
-            std::cerr << "non-fatal io error fetching line of proc/net/tcp\n";
-            break;
-        }
-
-        if (boost::regex_match(l.c_str(), m, re)) {
-            ProcTcpItem ti;
-            std::stringstream la6, ra6, ls, rs, us;
-
-            la6 << m[4] << m[3] << ":" << m[2] << m[1] << ":"
-                << m[8] << m[7] << ":" << m[6] << m[5] << ":"
-                << m[12] << m[11] << ":" << m[10] << m[9] << ":"
-                << m[16] << m[15] << ":" << m[14] << m[13];
-            ti.local_address_ = ba::ip::address::from_string(la6.str());
-            ls << std::hex << m[17] << m[18];
-            ls >> ti.local_port_;
-            ra6 << m[22] << m[21] << ":" << m[20] << m[19] << ":"
-                << m[26] << m[25] << ":" << m[24] << m[23] << ":"
-                << m[30] << m[29] << ":" << m[28] << m[27] << ":"
-                << m[34] << m[33] << ":" << m[32] << m[31];
-            ti.remote_address_ = ba::ip::address::from_string(ra6.str());
-            rs << std::hex << m[35] << m[36];
-            rs >> ti.remote_port_;
-            us << m[37];
-            us >> ti.uid;
-            if (ti.remote_port_ == cp && ti.local_port_ == sp) {
-                if (ti.remote_address_.to_v6() != ca)
-                    continue;
-                if (ti.local_address_.to_v6() != sa)
-                    continue;
-                found_ti_ = true;
-                ti_ = ti;
-                break;
-            }
-        }
-    }
-  out:
-    f.close();
-  out1:
-    return ti_.uid;
-}
-
 // XXX: extend config format to mask by local address?
 bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
                       ba::ip::address ca, int cp)
@@ -274,21 +68,30 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
     // deny||accept
     // spoof string
     // hash [uid] [ip] [sp] [cp]
+    std::cout << "1\n";
     re.assign("\\s*([a-zA-Z0-9:.-]+)"//"\\s*([0-9A-Fa-f:.]+)" // ipv[46]
               "(?:/(\\d{1,2}))?"
               "\\s+(?:\\*|(\\d{1,5})(?::(\\d{1,5}))?)"
               "\\s+(?:\\*|(\\d{1,5})(?::(\\d{1,5}))?)"
               "\\s*->\\s*([a-zA-Z0-9 \\t]+)");
+    std::cout << "2\n";
     re4.assign("^((?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9]))");
-    re6.assign("^(((?=(?>.*?::)(?!.*::)))(::)?(([0-9A-F]{1,4})::?){0,5}|((?5):){6})(\\2((?5)(::?|$)){0,2}|((25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])(\\.|$)){4}|(?5):(?5))(?<![^:]:|\\.)\\z",
-               boost::regex_constants::icase);
+    std::cout << "3\n";
+    // re6.assign("^(((?=(?>.*?::)(?!.*::)))(::)?(([0-9A-F]{1,4})::?){0,5}|((?5):){6})(\\2((?5)(::?|$)){0,2}|((25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])(\\.|$)){4}|(?5):(?5))(?<![^:]:|\\.)\\z",
+    //            boost::regex_constants::icase);
+    std::cout << "4\n";
     rehost.assign("(?:\\.?[A-Za-z0-9-]{1,63})+");
+    std::cout << "5\n";
     re_deny.assign("^deny\\s*", boost::regex_constants::icase);
+    std::cout << "6\n";
     re_accept.assign("^accept\\s*", boost::regex_constants::icase);
+    std::cout << "7\n";
     re_spoof.assign("^spoof\\s+([A-Za-z0-9]+)\\s*",
                     boost::regex_constants::icase);
+    std::cout << "8\n";
     re_hash.assign("^hash(\\s+(?:uid|ip|sp|cp))+\\s*",
                    boost::regex_constants::icase);
+    std::cout << "9\n";
 
     while (1) {
         std::getline(f, l);
@@ -309,19 +112,26 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
             ConfigItem ci;
             std::stringstream mask, llport, hlport, lrport, hrport;
 
-            if (boost::regex_match(hoststr.c_str(), n, re6)) {
-                ci.type = HostIP6;
+            // if (boost::regex_match(hoststr.c_str(), n, re6)) {
+            //     ci.type = HostIP6;
+            //     ci.host = ba::ip::address::from_string(hoststr);
+            // } else if (boost::regex_match(hoststr.c_str(), n, re4)) {
+            //     ci.type = HostIP4;
+            //     ci.host = ba::ip::address::from_string(hoststr);
+            // } else if (boost::regex_match(hoststr.c_str(), n, rehost)) {
+            //     ci.type = HostName;
+            //     // XXX support hostnames in config file
+            //     std::cerr << "support for hostnames NYI\n";
+            //     continue;
+            // } else
+            //     continue; // invalid
+            try {
                 ci.host = ba::ip::address::from_string(hoststr);
-            } else if (boost::regex_match(hoststr.c_str(), n, re4)) {
-                ci.type = HostIP4;
-                ci.host = ba::ip::address::from_string(hoststr);
-            } else if (boost::regex_match(hoststr.c_str(), n, rehost)) {
-                ci.type = HostName;
-                // XXX support hostnames in config file
-                std::cerr << "support for hostnames NYI\n";
+                ci.type = ci.host.is_v4() ? HostIP4 : HostIP6;
+            } catch (boost::system::error_code &ec) {
                 continue;
-            } else
-                continue; // invalid
+            }
+
             mask << std::dec << m[2];
             mask >> ci.mask;
             llport << std::dec << m[3];
@@ -439,7 +249,8 @@ bool Parse::compare_ipv6(ba::ip::address_v6::bytes_type ip,
 }
 
 std::string
-Parse::get_response(ba::ip::address sa, int sp, ba::ip::address ca, int cp)
+Parse::get_response(ba::ip::address sa, int sp, ba::ip::address ca, int cp,
+                    int uid)
 {
     std::stringstream ss;
     std::string ret;
@@ -451,7 +262,7 @@ Parse::get_response(ba::ip::address sa, int sp, ba::ip::address ca, int cp)
             ss << "ERROR:HIDDEN-USER";
     } else if (ci_.policy.action == PolicyAccept) {
         ss << "USERID:UNIX:";
-        ss << ti_.uid;
+        ss << uid;
     } else if (ci_.policy.action == PolicySpoof) {
         if (!getpwnam(ci_.policy.spoof.c_str())) {
             ss << "USERID:UNIX:";
@@ -469,7 +280,7 @@ Parse::get_response(ba::ip::address sa, int sp, ba::ip::address ca, int cp)
         std::stringstream sh;
         std::string hashstr;
         if (ci_.policy.isHashUID())
-            sh << ti_.uid;
+            sh << uid;
         if (ci_.policy.isHashIP())
             sh << ca;
         if (ci_.policy.isHashSP())

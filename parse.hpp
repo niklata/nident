@@ -1,5 +1,5 @@
 /* parse.hpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2011-03-27 12:47:17 nk>
+ * Time-stamp: <2011-03-28 07:54:59 nk>
  *
  * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -84,24 +84,11 @@ public:
             low_rport = -1; high_rport = -1;
         }
     };
-    struct ProcTcpItem {
-        boost::asio::ip::address local_address_;
-        int local_port_;
-        boost::asio::ip::address remote_address_;
-        int remote_port_;
-        int uid;
-        ProcTcpItem() {
-            local_port_ = -1;
-            remote_port_ = -1;
-            uid = -1;
-        }
-    };
     Parse() {
-        found_ti_ = false;
         found_ci_ = false;
     }
     std::string get_response(boost::asio::ip::address sa, int sp,
-                             boost::asio::ip::address ca, int cp);
+                             boost::asio::ip::address ca, int cp, int uid);
     int parse_tcp(const std::string &fn,
                   boost::asio::ip::address_v4 sa, int sp,
                   boost::asio::ip::address_v4 ca, int cp);
@@ -117,8 +104,6 @@ private:
     bool compare_ipv6(boost::asio::ip::address_v6::bytes_type ip,
                       boost::asio::ip::address_v6::bytes_type mask, int msize);
     std::string compress_64_to_unix(uint64_t qword);
-    bool found_ti_;
-    ProcTcpItem ti_;
     bool found_ci_;
     ConfigItem ci_;
 };
