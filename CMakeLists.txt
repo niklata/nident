@@ -14,6 +14,7 @@ include_directories ( ${Boost_INCLUDE_DIRS} )
 
 set(NIDENT_SRCS
   blake256.c
+  netlink.cpp
   parse.cpp
   identclient.cpp
   nident.cpp
@@ -21,6 +22,7 @@ set(NIDENT_SRCS
 
 set(NLTEST_SRCS
   netlink.cpp
+  nl-test.cpp
   )
 
 add_executable(nident ${NIDENT_SRCS})

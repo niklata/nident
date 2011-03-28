@@ -1,38 +1,17 @@
 #include <iostream>
-
 #include <unistd.h>
-#include <arpa/inet.h>
-
-#include <linux/inet_diag.h>
-#include <linux/rtnetlink.h>
-
-#include <boost/asio.hpp>
+#include "netlink.hpp"
 namespace ba = boost::asio;
-#include <boost/program_options.hpp>
-namespace po = boost::program_options;
 
-enum {
-    TCPF_ESTABLISHED = (1 << 1),
-    TCPF_SYN_SENT    = (1 << 2),
-    TCPF_SYN_RECV    = (1 << 3),
-    TCPF_FIN_WAIT1   = (1 << 4),
-    TCPF_FIN_WAIT2   = (1 << 5),
-    TCPF_TIME_WAIT   = (1 << 6),
-    TCPF_CLOSE       = (1 << 7),
-    TCPF_CLOSE_WAIT  = (1 << 8),
-    TCPF_LAST_ACK    = (1 << 9),
-    TCPF_LISTEN      = (1 << 10),
-    TCPF_CLOSING     = (1 << 11)
-};
-
-int bc_size(int salen, int calen)
+int Netlink::bc_size(int salen, int calen)
 {
     return 12 + 2 * sizeof (struct inet_diag_hostcond) + salen + calen;
 }
 
 // Returns the length of the message stored in bcbase or 0 on failure.
-int create_bc(char *bcbase, unsigned char *sabytes, int salen, uint16_t sport,
-              unsigned char *cabytes, int calen, uint16_t dport)
+int Netlink::create_bc(char *bcbase, unsigned char *sabytes, int salen,
+                       uint16_t sport, unsigned char *cabytes, int calen,
+                       uint16_t dport)
 {
     if (!sabytes || (salen != 4 && salen != 16))
         return 0;
@@ -69,109 +48,52 @@ int create_bc(char *bcbase, unsigned char *sabytes, int salen, uint16_t sport,
     return (op1 + op1->yes) - op0;
 }
 
-int main(int argc, const char *argv[])
+int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
+                         ba::ip::address da, unsigned short dp)
 {
-    std::string sastr, dastr;
-    unsigned short sp, dp;
-
-    po::options_description desc("Allowed options");
-    desc.add_options()
-        ("sa", po::value<std::string>(),
-         "source address that will be checked in printable format")
-        ("sp", po::value<unsigned short>(),
-         "source port that will be checked")
-        ("da", po::value<std::string>(),
-         "destination address that will be checked in printable format")
-        ("dp", po::value<unsigned short>(),
-         "destination port that will be checked")
-        ;
-    po::positional_options_description p;
-    p.add("sa", 1).add("sp", 1).add("da", 1).add("dp", 1);
-    po::variables_map vm;
-    try {
-        po::store(po::command_line_parser(argc, argv).
-                  options(desc).positional(p).run(), vm);
-    } catch (std::exception &e) {
-        std::cerr << e.what() << std::endl;
-    }
-    po::notify(vm);
-
-    if (vm.count("sa"))
-        sastr = vm["sa"].as<std::string>();
-    if (vm.count("sp"))
-        sp = vm["sp"].as<unsigned short>();
-    if (vm.count("da"))
-        dastr = vm["da"].as<std::string>();
-    if (vm.count("dp"))
-        dp = vm["dp"].as<unsigned short>();
-
-    if (!sastr.size()) {
-        std::cerr << "no source address specified\n";
-        exit(-1);
-    }
-    if (!sp) {
-        std::cerr << "no source port specified\n";
-        exit(-1);
-    }
-    if (!dastr.size()) {
-        std::cerr << "no destination address specified\n";
-        exit(-1);
-    }
-    if (!dp) {
-        std::cerr << "no destination port specified\n";
-        exit(-1);
-    }
-
-    std::cout << "src: " << sastr << ":" << sp << " dst: " << dastr << ":" << dp
-              << std::endl;
-
-    namespace ba = boost::asio;
-    ba::ip::address sa = ba::ip::address::from_string(sastr);
-    ba::ip::address da = ba::ip::address::from_string(dastr);
-    int salen, dalen;
-
-    if (sa.is_v6() != da.is_v6()) {
-        std::cerr << "src and dst must both be IPv4 or both be IPv6"
-                  << std::endl;
-        exit(-1);
-    }
-
-    if (sa.is_v4())
-        salen = 4;
-    else
-        salen = 16;
-    if (da.is_v4())
-        dalen = 4;
-    else
-        dalen = 16;
+    int uid = -1;
+    int salen = sa.is_v4() ? 4 : 16;
+    int dalen = da.is_v4() ? 4 : 16;
     int bclen = bc_size(salen, dalen);
 
-    int fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_INET_DIAG);
-    if (fd < 0) {
-        perror("socket");
-        exit(EXIT_FAILURE);
+    if (sa.is_v6() != da.is_v6()) {
+        std::cerr << "saddr and daddr must both be IPv4 or both be IPv6"
+                  << std::endl;
+        return uid;
     }
+
+    int fdt = socket(AF_NETLINK, SOCK_RAW, NETLINK_INET_DIAG);
+    if (fdt < 0) {
+        std::cerr << "get_tcp_uid: socket() error: " << strerror(errno)
+                  << std::endl;
+        return uid;
+    }
+    NetlinkFd fd(fdt);
 
     struct sockaddr_nl nladdr;
     memset(&nladdr, 0, sizeof nladdr);
     nladdr.nl_family = AF_NETLINK;
 
-    if (bind(fd, (struct sockaddr *)&nladdr, sizeof nladdr) < 0) {
-        perror("bind");
-        exit(EXIT_FAILURE);
+    if (bind(fd.data(), (struct sockaddr *)&nladdr, sizeof nladdr) < 0) {
+        std::cerr << "get_tcp_uid: bind() error: " << strerror(errno)
+                  << std::endl;
+        return uid;
     }
     socklen_t nladdr_len = sizeof nladdr;
-    if (getsockname(fd, (struct sockaddr *)&nladdr, &nladdr_len) < 0) {
-        perror("getsockname");
-        exit(EXIT_FAILURE);
+    if (getsockname(fd.data(), (struct sockaddr *)&nladdr, &nladdr_len) < 0) {
+        std::cerr << "get_tcp_uid: getsockname() error: " << strerror(errno)
+                  << std::endl;
+        return uid;
     }
     if (nladdr_len != sizeof nladdr) {
-        std::cerr << "getsockname address length mismatch" << std::endl;
-        exit(EXIT_FAILURE);
+        std::cerr << "get_tcp_uid: getsockname address length mismatch"
+                  << std::endl;
+        return uid;
     }
     if (nladdr.nl_family != AF_NETLINK) {
-        std::cerr << "getsockname address type mismatch" << std::endl;
-        exit(EXIT_FAILURE);
+        std::cerr << "get_tcp_uid: getsockname address type mismatch"
+                  << std::endl;
+        return uid;
     }
 
     unsigned int portid = nladdr.nl_pid;
@@ -224,21 +146,26 @@ int main(int argc, const char *argv[])
     msg.msg_iov = iov;
     msg.msg_iovlen = 3;
 
-    if (sendmsg(fd, &msg, 0) < 0)
-        return -1;
-
+    if (sendmsg(fd.data(), &msg, 0) < 0) {
+        std::cerr << "get_tcp_uid: sendmsg() error: " << strerror(errno)
+                  << std::endl;
+        delete[] bcbuf;
+        return uid;
+    }
     delete[] bcbuf;
 
-    char buf[getpagesize()];
+    char buf[8192];
     iov[0].iov_base = buf;
     iov[0].iov_len = sizeof buf;
     msg.msg_iov = iov;
     msg.msg_iovlen = 1;
 
-    int rbytes = recvmsg(fd, &msg, 0);
+    int rbytes = recvmsg(fd.data(), &msg, 0);
     if (rbytes < 0) {
-        perror("recvmsg");
-        exit(EXIT_FAILURE);
+        std::cerr << "get_tcp_uid: recvmsg() error: " << strerror(errno)
+                  << std::endl;
+        delete[] bcbuf;
+        return uid;
     }
 
     nlh = reinterpret_cast<struct nlmsghdr *>(buf);
@@ -247,12 +174,13 @@ int main(int argc, const char *argv[])
         nlh->nlmsg_len >= sizeof(struct nlmsghdr) &&
         (int)nlh->nlmsg_len <= rbytes) {
         if (nlh->nlmsg_pid != portid) {
-            std::cerr << "bad portid: " << nlh->nlmsg_pid << "!=" << portid << std::endl;
-            goto badmsg;
+            std::cerr << "get_tcp_uid: bad portid: "
+                      << nlh->nlmsg_pid << "!=" << portid << std::endl;
+            return uid;
         }
         if (nlh->nlmsg_seq != seq) {
-            std::cerr << "bad seq: " << seq << std::endl;
-            goto badmsg;
+            std::cerr << "get_tcp_uid: bad seq: " << seq << std::endl;
+            return uid;
         }
 
         if (nlh->nlmsg_type == TCPDIAG_GETSOCK) {
@@ -260,7 +188,10 @@ int main(int argc, const char *argv[])
 
             unsigned short sport = ntohs(r->id.idiag_sport);
             unsigned short dport = ntohs(r->id.idiag_dport);
-            int uid = r->idiag_uid;
+            if (sport != sp || dport != dp) {
+                std::cerr << "get_tcp_uid: ports do not match " << std::endl;
+                return uid;
+            }
 
             ba::ip::address saddr, daddr;
             if (r->idiag_family == AF_INET) {
@@ -276,15 +207,15 @@ int main(int argc, const char *argv[])
                 saddr = ba::ip::address(ba::ip::address_v6(s6b));
                 daddr = ba::ip::address(ba::ip::address_v6(s6b));
             }
+            if (saddr != sa || daddr != da) {
+                std::cerr << "get_tcp_uid: addresses do not match " << std::endl;
+                return uid;
+            }
 
-            std::cout << "src: " << saddr << ":" << sport << std::endl;
-            std::cout << "dst: " << daddr << ":" << dport << std::endl;
-            std::cout << "uid: " << uid << std::endl;
+            uid = r->idiag_uid;
+            // std::cout << "src: " << saddr << ":" << sport << std::endl;
+            // std::cout << "dst: " << daddr << ":" << dport << std::endl;
         }
     }
-  badmsg:
-
-    close(fd);
-
-    return 0;
+    return uid;
 }
