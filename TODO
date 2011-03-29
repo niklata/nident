@@ -1,10 +1,6 @@
-Support chrooting: figure out why netlink fails.
-
 Fix some bugs:
 njk@darksword:~/install/tm/iproute2-2.6.38/misc % ncat -4 localhost 113
 45770,113
 45770,113:ERROR:UNKNOWN-ERROR
-
-Re-use netlink sockets across requests.
 
 Support filter by reverse DNS lookup of remote hostnames.

@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2011-03-29 00:16:51 nk>
+ * Time-stamp: <2011-03-29 01:17:01 nk>
  *
  * (c) 2004-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -55,6 +55,7 @@
 #include <boost/program_options.hpp>
 
 #include "identclient.hpp"
+#include "netlink.hpp"
 
 extern "C" {
 #include "defines.h"
@@ -71,7 +72,9 @@ extern "C" {
 namespace po = boost::program_options;
 
 boost::asio::io_service io_service;
+Netlink *nlink;
 bool gParanoid = false;
+bool gChrooted = false;
 
 static void sighandler(int sig)
 {
@@ -261,6 +264,13 @@ int main(int ac, char *av[]) {
 	}
     addrlist.clear();
 
+    nlink = new Netlink;
+    if (!nlink->open(NETLINK_INET_DIAG)) {
+	std::cerr << "failed to create netlink socket" << std::endl;
+	delete nlink;
+	exit(EXIT_FAILURE);
+    }
+
     if (chroot_path.size()) {
 	if (getuid())
 	    suicide("root required for chroot\n");
@@ -268,17 +278,18 @@ int main(int ac, char *av[]) {
 	    suicide("failed to chdir(%s)\n", chroot_path.c_str());
 	if (chroot(chroot_path.c_str()))
 	    suicide("failed to chroot(%s)\n", chroot_path.c_str());
-	chroot.clear();
+	gChrooted = true;
+	chroot_path.clear();
     }
-    if (uid != 0 || gid != 0) {
+    if (uid != 0 || gid != 0)
 	drop_root(uid, gid);
-    }
 
     /* Cover our tracks... */
     pidfile.clear();
 
     io_service.run();
 
+    delete nlink;
     exit(EXIT_SUCCESS);
 }
 

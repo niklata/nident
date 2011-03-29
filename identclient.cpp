@@ -1,5 +1,5 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2011-03-28 07:54:15 nk>
+ * Time-stamp: <2011-03-29 01:11:35 nk>
  *
  * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -35,6 +35,7 @@
 #include <pwd.h>
 
 #include <boost/bind.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include "identclient.hpp"
 #include "parse.hpp"
@@ -47,8 +48,10 @@ extern "C" {
 namespace ba = boost::asio;
 
 extern ba::io_service io_service;
-
+extern Netlink *nlink;
 extern bool gParanoid;
+extern bool gChrooted;
+
 unsigned int max_client_bytes = 128;
 
 IdentClient::IdentClient(ba::io_service &io_service)
@@ -259,20 +262,27 @@ bool IdentClient::create_reply()
         log_line("Request parse incomplete: should never happen.");
         return false;
     } else {
-        Netlink nl;
-        int uid = nl.get_tcp_uid(server_address_, server_port_,
-                                 client_address_, client_port_);
+        int uid = nlink->get_tcp_uid(server_address_, server_port_,
+                                     client_address_, client_port_);
         if (uid == -1) {
             if (gParanoid)
                 reply = "ERROR:UNKNOWN-ERROR";
             else
                 reply = "ERROR:NO-USER";
         } else {
-            struct passwd *pw = getpwuid(uid);
-            if (pw && pw->pw_dir) {
+            std::string path;
+            if (!gChrooted) {
+                struct passwd *pw = getpwuid(uid);
+                if (pw && pw->pw_dir) {
+                    path = pw->pw_dir;
+                    path += "/.ident";
+                }
+            } else {
+                path = "/";
+                path += boost::lexical_cast<std::string>(uid);
+            }
+            if (path.size()) {
                 Parse pa;
-                std::string path(pw->pw_dir);
-                path += "/.ident";
                 if (pa.parse_cfg(path, server_address_, server_port_,
                                  client_address_, client_port_))
                     reply = pa.get_response(server_address_, server_port_,
