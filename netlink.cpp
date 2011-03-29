@@ -1,5 +1,5 @@
 /* netlink.cpp - netlink abstraction
- * Time-stamp: <2011-03-29 08:04:59 nk>
+ * Time-stamp: <2011-03-29 08:20:25 nk>
  *
  * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -171,7 +171,6 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
         struct rtgenmsg g;
     } req;
     unsigned int this_seq = seq_++;
-
     memset(&req, 0, sizeof req);
     req.nlh.nlmsg_len = sizeof req;
     req.nlh.nlmsg_type = RTM_GETLINK;
@@ -179,21 +178,12 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
     req.nlh.nlmsg_pid = portid_;
     req.nlh.nlmsg_seq = this_seq;
     req.g.rtgen_family = RTM_GETLINK;
-
     send(fd_, (void*)&req, sizeof req, 0); // check errors
 
     char buf[8192];
-    struct iovec iov[1];
-    struct msghdr msg;
-    memset(&msg, 0, sizeof msg);
-    iov[0].iov_base = buf;
-    iov[0].iov_len = sizeof buf;
-    msg.msg_iov = iov;
-    msg.msg_iovlen = 1;
-
-    int rbytes = recvmsg(fd_, &msg, 0);
+    int rbytes = recv(fd_, buf, sizeof buf, 0);
     if (rbytes < 0) {
-        std::cerr << "get_if_stats: recvmsg() error: " << strerror(errno)
+        std::cerr << "get_if_stats: recv() error: " << strerror(errno)
                   << std::endl;
         return false;
     }
@@ -228,28 +218,26 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
                     tb[rta->rta_type] = rta;
             }
 
+            // Sanity check the raw data.
             if (tb[IFLA_IFNAME] == NULL || tb[IFLA_STATS] == NULL)
                 continue;
 
+            // Skip if the interface name doesn't match.
             std::string name((char *)RTA_DATA(tb[IFLA_IFNAME]));
-            double rate[NLK_RTM_NL_DATAMAX];
-            uint32_t ival[NLK_RTM_NL_DATAMAX];
-
             if (ifname != name)
                 continue;
 
+            // idx: 0 = rxpkts, 1 = txpkts, 2 = rxbytes, 3 = txbytes
+            uint32_t ival[NLK_RTM_NL_DATAMAX] = {};
             memcpy(ival, RTA_DATA(tb[IFLA_STATS]), sizeof ival);
-            memset(rate, 0, sizeof rate);
-
-            // idx: 2 = rx, 3 = tx | vals, rate, idx
             *rx = ival[2];
             *tx = ival[3];
 
-            while (recvmsg(fd_, &msg, MSG_DONTWAIT) >= 0);
+            while (recv(fd_, buf, sizeof buf, MSG_DONTWAIT) >= 0);
             return true;
         }
     }
-    if (recvmsg(fd_, &msg, MSG_DONTWAIT) >= 0)
+    if (recv(fd_, buf, sizeof buf, MSG_DONTWAIT) >= 0)
         goto again;
     return false;
 }
