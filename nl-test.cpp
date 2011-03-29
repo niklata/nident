@@ -1,5 +1,5 @@
 /* nl-test.cpp - netlink abstraction test code
- * Time-stamp: <2011-03-28 07:42:03 nk>
+ * Time-stamp: <2011-03-29 07:12:25 nk>
  *
  * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -40,6 +40,8 @@ int main(int argc, const char *argv[])
 
     po::options_description desc("Allowed options");
     desc.add_options()
+        ("rates", po::value<std::string>(),
+         "interface name where rates will be checked")
         ("sa", po::value<std::string>(),
          "source address that will be checked in printable format")
         ("sp", po::value<unsigned short>(),
@@ -59,6 +61,17 @@ int main(int argc, const char *argv[])
         std::cerr << e.what() << std::endl;
     }
     po::notify(vm);
+
+    if (vm.count("rates")) {
+        std::string ifname = vm["rates"].as<std::string>();
+        Netlink nl;
+        size_t rx = 0, tx = 0;
+        if (nl.get_if_stats(ifname, &rx, &tx)) {
+            std::cout << "rx: " << rx << " tx: " << tx << std::endl;
+            exit(EXIT_SUCCESS);
+        }
+        exit(EXIT_FAILURE);
+    }
 
     if (vm.count("sa"))
         sastr = vm["sa"].as<std::string>();

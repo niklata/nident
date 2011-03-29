@@ -1,5 +1,5 @@
 /* netlink.cpp - netlink abstraction
- * Time-stamp: <2011-03-29 05:45:28 nk>
+ * Time-stamp: <2011-03-29 08:04:59 nk>
  *
  * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -155,6 +155,103 @@ struct nlmsghdr *Netlink::nlmsg_next(const struct nlmsghdr *nlh, int &len)
 {
     len -= NLK_ALIGN(nlh->nlmsg_len);
     return (struct nlmsghdr *)((char *)nlh + NLK_ALIGN(nlh->nlmsg_len));
+}
+
+#define NLK_RTM_NL_DATAMAX (sizeof(struct rtnl_link_stats)/sizeof(uint32_t))
+bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
+{
+    if (!open(NETLINK_ROUTE)) {
+        std::cerr << "failed to create netlink socket" << std::endl;
+        return false;
+    }
+
+    struct nlmsghdr *nlh;
+    struct {
+        struct nlmsghdr nlh;
+        struct rtgenmsg g;
+    } req;
+    unsigned int this_seq = seq_++;
+
+    memset(&req, 0, sizeof req);
+    req.nlh.nlmsg_len = sizeof req;
+    req.nlh.nlmsg_type = RTM_GETLINK;
+    req.nlh.nlmsg_flags = NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST;
+    req.nlh.nlmsg_pid = portid_;
+    req.nlh.nlmsg_seq = this_seq;
+    req.g.rtgen_family = RTM_GETLINK;
+
+    send(fd_, (void*)&req, sizeof req, 0); // check errors
+
+    char buf[8192];
+    struct iovec iov[1];
+    struct msghdr msg;
+    memset(&msg, 0, sizeof msg);
+    iov[0].iov_base = buf;
+    iov[0].iov_len = sizeof buf;
+    msg.msg_iov = iov;
+    msg.msg_iovlen = 1;
+
+    int rbytes = recvmsg(fd_, &msg, 0);
+    if (rbytes < 0) {
+        std::cerr << "get_if_stats: recvmsg() error: " << strerror(errno)
+                  << std::endl;
+        return false;
+    }
+
+  again:
+    for (nlh = reinterpret_cast<struct nlmsghdr *>(buf);
+         nlmsg_ok(nlh, rbytes); nlh = nlmsg_next(nlh, rbytes)) {
+        if (nlh->nlmsg_pid != portid_) {
+            std::cerr << "get_if_stats: bad portid: "
+                      << nlh->nlmsg_pid << "!=" << portid_ << std::endl;
+            continue;
+        }
+        if (nlh->nlmsg_seq != this_seq) {
+            std::cerr << "get_if_stats: bad seq: " << nlh->nlmsg_seq
+                      << " != " << this_seq << std::endl;
+            continue;
+        }
+
+        if (nlh->nlmsg_type == RTM_NEWLINK) {
+            struct ifinfomsg *ifi = (struct ifinfomsg *)NLMSG_DATA(nlh);
+            struct rtattr *tb[IFLA_MAX+1] = {};
+
+            // See if interface is down.
+            if (!(ifi->ifi_flags & IFF_UP))
+                continue;
+
+            // Populate tb with the real stats data.
+            size_t rta_size = nlh->nlmsg_len - sizeof(*nlh) - sizeof(*ifi);
+            auto rta = IFLA_RTA(ifi);
+            for (; RTA_OK(rta, rta_size); rta = RTA_NEXT(rta, rta_size)) {
+                if ((rta->rta_type <= IFLA_MAX) && (!tb[rta->rta_type]))
+                    tb[rta->rta_type] = rta;
+            }
+
+            if (tb[IFLA_IFNAME] == NULL || tb[IFLA_STATS] == NULL)
+                continue;
+
+            std::string name((char *)RTA_DATA(tb[IFLA_IFNAME]));
+            double rate[NLK_RTM_NL_DATAMAX];
+            uint32_t ival[NLK_RTM_NL_DATAMAX];
+
+            if (ifname != name)
+                continue;
+
+            memcpy(ival, RTA_DATA(tb[IFLA_STATS]), sizeof ival);
+            memset(rate, 0, sizeof rate);
+
+            // idx: 2 = rx, 3 = tx | vals, rate, idx
+            *rx = ival[2];
+            *tx = ival[3];
+
+            while (recvmsg(fd_, &msg, MSG_DONTWAIT) >= 0);
+            return true;
+        }
+    }
+    if (recvmsg(fd_, &msg, MSG_DONTWAIT) >= 0)
+        goto again;
+    return false;
 }
 
 int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
