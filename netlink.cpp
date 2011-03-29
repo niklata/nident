@@ -1,5 +1,5 @@
 /* netlink.cpp - netlink abstraction
- * Time-stamp: <2011-03-29 02:40:13 nk>
+ * Time-stamp: <2011-03-29 03:26:02 nk>
  *
  * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -165,15 +165,23 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                          ba::ip::address da, unsigned short dp)
 {
     int uid = -1;
-    int salen = sa.is_v4() ? 4 : 16;
-    int dalen = da.is_v4() ? 4 : 16;
-    int bclen = bc_size(salen, dalen);
-
     if (sa.is_v6() != da.is_v6()) {
         std::cerr << "saddr and daddr must both be IPv4 or both be IPv6"
                   << std::endl;
         return uid;
     }
+
+    int salen, dalen;
+    bool sa6mapped = false, da6mapped = false;
+    if (sa.is_v4()) {
+        salen = dalen = 4;
+    } else {
+        sa6mapped = sa.to_v6().is_v4_mapped();
+        da6mapped = da.to_v6().is_v4_mapped();
+        salen = sa6mapped ? 4 : 16;
+        dalen = da6mapped ? 4 : 16;
+    }
+    int bclen = bc_size(salen, dalen);
 
     if (!open(NETLINK_INET_DIAG)) {
         std::cerr << "failed to create netlink socket" << std::endl;
@@ -209,12 +217,15 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     iov[0].iov_len = sizeof req;
     char *bcbuf = new char[bclen];
     memset(bcbuf, 0, bclen);
-    if (salen == 4) {
+    if (sa.is_v4()) {
         create_bc(bcbuf, sa.to_v4().to_bytes().data(), salen, sp,
                   da.to_v4().to_bytes().data(), dalen, dp);
     } else {
-        create_bc(bcbuf, sa.to_v6().to_bytes().data(), salen, sp,
-                  da.to_v6().to_bytes().data(), dalen, dp);
+        auto sb = sa.to_v6().is_v4_mapped() ?
+            sa.to_v6().to_v4().to_bytes().data() : sa.to_v6().to_bytes().data();
+        auto db = da.to_v6().is_v4_mapped() ?
+            da.to_v6().to_v4().to_bytes().data() : da.to_v6().to_bytes().data();
+        create_bc(bcbuf, sb, salen, sp, db, dalen, dp);
     }
     rta.rta_type = INET_DIAG_REQ_BYTECODE;
     rta.rta_len = RTA_LENGTH(bclen);
@@ -283,19 +294,44 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                 ba::ip::address_v4::bytes_type s4b, d4b;
                 memcpy(s4b.data(), r->id.idiag_src, 4);
                 memcpy(d4b.data(), r->id.idiag_dst, 4);
-                saddr = ba::ip::address(ba::ip::address_v4(s4b));
-                daddr = ba::ip::address(ba::ip::address_v4(d4b));
+                auto s4 = ba::ip::address_v4(s4b);
+                auto d4 = ba::ip::address_v4(d4b);
+                saddr = ba::ip::address(s4);
+                daddr = ba::ip::address(d4);
+                if (sa6mapped) {
+                    auto sa4 = sa.to_v6().to_v4();
+                    if (sa4 != s4) {
+                        std::cerr << "get_tcp_uid: v4-mapped src addresses do not match\n";
+                        continue;
+                    }
+                } else if (saddr != sa) {
+                    std::cerr << "get_tcp_uid: v4 src addresses do not match\n";
+                    continue;
+                }
+                if (da6mapped) {
+                    auto da4 = da.to_v6().to_v4();
+                    if (da4 != d4) {
+                        std::cerr << "get_tcp_uid: v4-mapped dst addresses do not match\n";
+                        continue;
+                    }
+                } else if (daddr != da) {
+                    std::cerr << "get_tcp_uid: v4 dst addresses do not match\n";
+                    continue;
+                }
             } else {
                 ba::ip::address_v6::bytes_type s6b, d6b;
                 memcpy(s6b.data(), r->id.idiag_src, 16);
                 memcpy(d6b.data(), r->id.idiag_dst, 16);
                 saddr = ba::ip::address(ba::ip::address_v6(s6b));
                 daddr = ba::ip::address(ba::ip::address_v6(s6b));
-            }
-            if (saddr != sa || daddr != da) {
-                std::cerr << "get_tcp_uid: addresses do not match "
-                          << std::endl;
-                continue;
+                if (saddr != sa) {
+                    std::cerr << "get_tcp_uid: v6 src addresses do not match\n";
+                    continue;
+                }
+                if (daddr != da) {
+                    std::cerr << "get_tcp_uid: v6 dst addresses do not match\n";
+                    continue;
+                }
             }
             uid = r->idiag_uid;
             std::cout << "src: " << saddr << ":" << sport << " dst: "
