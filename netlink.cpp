@@ -1,5 +1,5 @@
 /* netlink.cpp - netlink abstraction
- * Time-stamp: <2011-03-28 07:41:32 nk>
+ * Time-stamp: <2011-03-28 22:10:43 nk>
  *
  * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -32,7 +32,16 @@
 #include "netlink.hpp"
 namespace ba = boost::asio;
 
-int Netlink::bc_size(int salen, int calen)
+Netlink::Netlink() {
+    fd_ = -1;
+    socktype_ = -1;
+}
+
+Netlink::~Netlink() {
+    close(fd_);
+}
+
+int Netlink::bc_size(int salen, int calen) const
 {
     return 12 + 2 * sizeof (struct inet_diag_hostcond) + salen + calen;
 }
@@ -77,6 +86,77 @@ int Netlink::create_bc(char *bcbase, unsigned char *sabytes, int salen,
     return (op1 + op1->yes) - op0;
 }
 
+bool Netlink::open(int socktype)
+{
+    if (fd_ != -1) {
+        if (socktype_ == socktype)
+            return true;
+        else {
+            close(fd_);
+            fd_ = -1;
+            socktype_ = -1;
+        }
+    }
+
+    int ret = socket(AF_NETLINK, SOCK_RAW, socktype);
+    if (ret < 0) {
+        std::cerr << "Netlink: socket() error: " << strerror(errno) << std::endl;
+        return false;
+    }
+    fd_ = ret;
+    socktype_ = socktype;
+
+    struct sockaddr_nl nladdr;
+    socklen_t nladdr_len = sizeof nladdr;
+    memset(&nladdr, 0, sizeof nladdr);
+    nladdr.nl_family = AF_NETLINK;
+
+    if (bind(fd_, (struct sockaddr *)&nladdr, sizeof nladdr) < 0) {
+        std::cerr << "get_tcp_uid: bind() error: " << strerror(errno)
+                  << std::endl;
+        goto fail;
+    }
+    if (getsockname(fd_, (struct sockaddr *)&nladdr, &nladdr_len) < 0) {
+        std::cerr << "get_tcp_uid: getsockname() error: " << strerror(errno)
+                  << std::endl;
+        goto fail;
+    }
+    if (nladdr_len != sizeof nladdr) {
+        std::cerr << "get_tcp_uid: getsockname address length mismatch"
+                  << std::endl;
+        goto fail;
+    }
+    if (nladdr.nl_family != AF_NETLINK) {
+        std::cerr << "get_tcp_uid: getsockname address type mismatch"
+                  << std::endl;
+        goto fail;
+    }
+
+    portid_ = nladdr.nl_pid;
+    seq_ = time(NULL);
+
+    return true;
+  fail:
+    close(fd_);
+    fd_ = -1;
+    return false;
+}
+
+bool Netlink::nlmsg_ok(const struct nlmsghdr *nlh, int len) const
+{
+    return len >= (int)sizeof(struct nlmsghdr) &&
+        nlh->nlmsg_len >= sizeof(struct nlmsghdr) &&
+        (int)nlh->nlmsg_len <= len;
+}
+
+#define NLK_ALIGNTO             4
+#define NLK_ALIGN(len)          (((len)+NLK_ALIGNTO-1) & ~(NLK_ALIGNTO-1))
+struct nlmsghdr *Netlink::nlmsg_next(const struct nlmsghdr *nlh, int &len)
+{
+    len -= NLK_ALIGN(nlh->nlmsg_len);
+    return (struct nlmsghdr *)((char *)nlh + NLK_ALIGN(nlh->nlmsg_len));
+}
+
 int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                          ba::ip::address da, unsigned short dp)
 {
@@ -91,42 +171,10 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
         return uid;
     }
 
-    int fdt = socket(AF_NETLINK, SOCK_RAW, NETLINK_INET_DIAG);
-    if (fdt < 0) {
-        std::cerr << "get_tcp_uid: socket() error: " << strerror(errno)
-                  << std::endl;
+    if (!open(NETLINK_INET_DIAG)) {
+        std::cerr << "failed to create netlink socket" << std::endl;
         return uid;
     }
-    NetlinkFd fd(fdt);
-
-    struct sockaddr_nl nladdr;
-    memset(&nladdr, 0, sizeof nladdr);
-    nladdr.nl_family = AF_NETLINK;
-
-    if (bind(fd.data(), (struct sockaddr *)&nladdr, sizeof nladdr) < 0) {
-        std::cerr << "get_tcp_uid: bind() error: " << strerror(errno)
-                  << std::endl;
-        return uid;
-    }
-    socklen_t nladdr_len = sizeof nladdr;
-    if (getsockname(fd.data(), (struct sockaddr *)&nladdr, &nladdr_len) < 0) {
-        std::cerr << "get_tcp_uid: getsockname() error: " << strerror(errno)
-                  << std::endl;
-        return uid;
-    }
-    if (nladdr_len != sizeof nladdr) {
-        std::cerr << "get_tcp_uid: getsockname address length mismatch"
-                  << std::endl;
-        return uid;
-    }
-    if (nladdr.nl_family != AF_NETLINK) {
-        std::cerr << "get_tcp_uid: getsockname address type mismatch"
-                  << std::endl;
-        return uid;
-    }
-
-    unsigned int portid = nladdr.nl_pid;
-    unsigned int seq;
 
     struct nlmsghdr *nlh;
     struct {
@@ -136,15 +184,17 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     struct iovec iov[3];
     struct msghdr msg;
     struct rtattr rta;
+    unsigned int this_seq = seq_++;
 
+    struct sockaddr_nl nladdr;
     memset(&nladdr, 0, sizeof nladdr);
     nladdr.nl_family = AF_NETLINK;
 
     req.nlh.nlmsg_len = sizeof req;
     req.nlh.nlmsg_type = TCPDIAG_GETSOCK;
     req.nlh.nlmsg_flags = NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST;
-    req.nlh.nlmsg_pid = portid;
-    req.nlh.nlmsg_seq = seq = time(NULL);
+    req.nlh.nlmsg_pid = portid_;
+    req.nlh.nlmsg_seq = this_seq;
     memset(&req.r, 0, sizeof req.r);
     req.r.idiag_family = AF_INET;
     req.r.idiag_states = TCPF_ESTABLISHED;
@@ -175,7 +225,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     msg.msg_iov = iov;
     msg.msg_iovlen = 3;
 
-    if (sendmsg(fd.data(), &msg, 0) < 0) {
+    if (sendmsg(fd_, &msg, 0) < 0) {
         std::cerr << "get_tcp_uid: sendmsg() error: " << strerror(errno)
                   << std::endl;
         delete[] bcbuf;
@@ -189,7 +239,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     msg.msg_iov = iov;
     msg.msg_iovlen = 1;
 
-    int rbytes = recvmsg(fd.data(), &msg, 0);
+    int rbytes = recvmsg(fd_, &msg, 0);
     if (rbytes < 0) {
         std::cerr << "get_tcp_uid: recvmsg() error: " << strerror(errno)
                   << std::endl;
@@ -197,19 +247,16 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
         return uid;
     }
 
-    nlh = reinterpret_cast<struct nlmsghdr *>(buf);
-
-    if (rbytes >= (int)sizeof(struct nlmsghdr) &&
-        nlh->nlmsg_len >= sizeof(struct nlmsghdr) &&
-        (int)nlh->nlmsg_len <= rbytes) {
-        if (nlh->nlmsg_pid != portid) {
+    for (nlh = reinterpret_cast<struct nlmsghdr *>(buf);
+         nlmsg_ok(nlh, rbytes); nlh = nlmsg_next(nlh, rbytes)) {
+        if (nlh->nlmsg_pid != portid_) {
             std::cerr << "get_tcp_uid: bad portid: "
-                      << nlh->nlmsg_pid << "!=" << portid << std::endl;
-            return uid;
+                      << nlh->nlmsg_pid << "!=" << portid_ << std::endl;
+            continue;
         }
-        if (nlh->nlmsg_seq != seq) {
-            std::cerr << "get_tcp_uid: bad seq: " << seq << std::endl;
-            return uid;
+        if (nlh->nlmsg_seq != this_seq) {
+            std::cerr << "get_tcp_uid: bad seq: " << this_seq << std::endl;
+            continue;
         }
 
         if (nlh->nlmsg_type == TCPDIAG_GETSOCK) {
@@ -219,9 +266,8 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
             unsigned short dport = ntohs(r->id.idiag_dport);
             if (sport != sp || dport != dp) {
                 std::cerr << "get_tcp_uid: ports do not match " << std::endl;
-                return uid;
+                continue;
             }
-
             ba::ip::address saddr, daddr;
             if (r->idiag_family == AF_INET) {
                 ba::ip::address_v4::bytes_type s4b, d4b;
@@ -237,13 +283,14 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                 daddr = ba::ip::address(ba::ip::address_v6(s6b));
             }
             if (saddr != sa || daddr != da) {
-                std::cerr << "get_tcp_uid: addresses do not match " << std::endl;
-                return uid;
+                std::cerr << "get_tcp_uid: addresses do not match "
+                          << std::endl;
+                continue;
             }
-
             uid = r->idiag_uid;
-            // std::cout << "src: " << saddr << ":" << sport << std::endl;
-            // std::cout << "dst: " << daddr << ":" << dport << std::endl;
+            // std::cout << "src: " << saddr << ":" << sport << " dst: "
+            //           << daddr << ":" << dport << std::endl;
+            break;
         }
     }
     return uid;
