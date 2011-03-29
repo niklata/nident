@@ -1,5 +1,5 @@
 /* netlink.cpp - netlink abstraction
- * Time-stamp: <2011-03-29 03:26:02 nk>
+ * Time-stamp: <2011-03-29 03:33:20 nk>
  *
  * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -88,19 +88,15 @@ int Netlink::create_bc(char *bcbase, unsigned char *sabytes, int salen,
 
 bool Netlink::open(int socktype)
 {
-    std::cerr << "entered Netlink::open()\n";
     if (fd_ != -1) {
         if (socktype_ == socktype) {
-            std::cerr << "Netlink::open(): existing socket OK\n";
             return true;
         } else {
-            std::cerr << "Netlink::open(): existing socket destroyed\n";
             close(fd_);
             fd_ = -1;
             socktype_ = -1;
         }
     }
-    std::cerr << "Netlink::open(): opening new socket\n";
 
     int ret = socket(AF_NETLINK, SOCK_RAW, socktype);
     if (ret < 0) {
@@ -197,7 +193,6 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     struct msghdr msg;
     struct rtattr rta;
     unsigned int this_seq = seq_++;
-    std::cout << "this seq = " << this_seq << std::endl;
 
     struct sockaddr_nl nladdr;
     memset(&nladdr, 0, sizeof nladdr);
@@ -265,7 +260,6 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
   again:
     for (nlh = reinterpret_cast<struct nlmsghdr *>(buf);
          nlmsg_ok(nlh, rbytes); nlh = nlmsg_next(nlh, rbytes)) {
-        std::cerr << "Got a netlink reply!\n";
         if (nlh->nlmsg_pid != portid_) {
             std::cerr << "get_tcp_uid: bad portid: "
                       << nlh->nlmsg_pid << "!=" << portid_ << std::endl;
@@ -276,12 +270,9 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                       << " != " << this_seq << std::endl;
             continue;
         }
-        std::cerr << "  -> sequence (" << this_seq << ") and portid passed\n";
 
         if (nlh->nlmsg_type == TCPDIAG_GETSOCK) {
             struct inet_diag_msg *r = (struct inet_diag_msg *)NLMSG_DATA(nlh);
-
-            std::cerr << "  -> message type is TCPDIAG_GETSOCK\n";
 
             unsigned short sport = ntohs(r->id.idiag_sport);
             unsigned short dport = ntohs(r->id.idiag_dport);
@@ -334,8 +325,8 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                 }
             }
             uid = r->idiag_uid;
-            std::cout << "src: " << saddr << ":" << sport << " dst: "
-                      << daddr << ":" << dport << std::endl;
+            // std::cout << "src: " << saddr << ":" << sport << " dst: "
+            //           << daddr << ":" << dport << std::endl;
             while (recvmsg(fd_, &msg, MSG_DONTWAIT) >= 0);
             break;
         }

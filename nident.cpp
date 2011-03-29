@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2011-03-29 01:17:01 nk>
+ * Time-stamp: <2011-03-29 03:36:05 nk>
  *
  * (c) 2004-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -241,7 +241,7 @@ int main(int ac, char *av[]) {
 	for (auto i = addrlist.cbegin(); i != addrlist.cend(); ++i) {
 	    std::string addr = *i;
 	    int port = 113;
-	    auto loc = addr.find(":");
+	    auto loc = addr.rfind(":");
 	    if (loc != std::string::npos) {
 		auto pstr = addr.substr(loc + 1);
 		try {
@@ -252,7 +252,6 @@ int main(int ac, char *av[]) {
 		}
 		addr.erase(loc);
 	    }
-	    std::cout << "addr " << addr << ":" << port << std::endl;
 	    try {
 		auto addy = boost::asio::ip::address::from_string(addr);
 		auto ep = boost::asio::ip::tcp::endpoint(addy, port);
