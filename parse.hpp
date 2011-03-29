@@ -1,5 +1,5 @@
 /* parse.hpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2011-03-28 07:54:59 nk>
+ * Time-stamp: <2011-03-28 21:04:40 nk>
  *
  * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -89,12 +89,6 @@ public:
     }
     std::string get_response(boost::asio::ip::address sa, int sp,
                              boost::asio::ip::address ca, int cp, int uid);
-    int parse_tcp(const std::string &fn,
-                  boost::asio::ip::address_v4 sa, int sp,
-                  boost::asio::ip::address_v4 ca, int cp);
-    int parse_tcp6(const std::string &fn,
-                   boost::asio::ip::address_v6 sa, int sp,
-                   boost::asio::ip::address_v6 ca, int cp);
     bool parse_cfg(const std::string &fn,
                    boost::asio::ip::address sa, int sp,
                    boost::asio::ip::address ca, int cp);

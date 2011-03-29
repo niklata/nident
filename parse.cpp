@@ -1,5 +1,5 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2011-03-28 08:09:54 nk>
+ * Time-stamp: <2011-03-28 21:03:50 nk>
  *
  * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -52,7 +52,7 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
-    boost::regex re, re4, re6, rehost;
+    boost::regex re, rehost;
     boost::regex re_accept, re_deny, re_spoof, re_hash;
     boost::cmatch m;
 
@@ -68,30 +68,21 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
     // deny||accept
     // spoof string
     // hash [uid] [ip] [sp] [cp]
-    std::cout << "1\n";
     re.assign("\\s*([a-zA-Z0-9:.-]+)"//"\\s*([0-9A-Fa-f:.]+)" // ipv[46]
               "(?:/(\\d{1,2}))?"
               "\\s+(?:\\*|(\\d{1,5})(?::(\\d{1,5}))?)"
               "\\s+(?:\\*|(\\d{1,5})(?::(\\d{1,5}))?)"
               "\\s*->\\s*([a-zA-Z0-9 \\t]+)");
-    std::cout << "2\n";
-    re4.assign("^((?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9]))");
-    std::cout << "3\n";
+    // re4.assign("^((?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9]))");
     // re6.assign("^(((?=(?>.*?::)(?!.*::)))(::)?(([0-9A-F]{1,4})::?){0,5}|((?5):){6})(\\2((?5)(::?|$)){0,2}|((25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])(\\.|$)){4}|(?5):(?5))(?<![^:]:|\\.)\\z",
     //            boost::regex_constants::icase);
-    std::cout << "4\n";
     rehost.assign("(?:\\.?[A-Za-z0-9-]{1,63})+");
-    std::cout << "5\n";
     re_deny.assign("^deny\\s*", boost::regex_constants::icase);
-    std::cout << "6\n";
     re_accept.assign("^accept\\s*", boost::regex_constants::icase);
-    std::cout << "7\n";
     re_spoof.assign("^spoof\\s+([A-Za-z0-9]+)\\s*",
                     boost::regex_constants::icase);
-    std::cout << "8\n";
     re_hash.assign("^hash(\\s+(?:uid|ip|sp|cp))+\\s*",
                    boost::regex_constants::icase);
-    std::cout << "9\n";
 
     while (1) {
         std::getline(f, l);
@@ -112,24 +103,17 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
             ConfigItem ci;
             std::stringstream mask, llport, hlport, lrport, hrport;
 
-            // if (boost::regex_match(hoststr.c_str(), n, re6)) {
-            //     ci.type = HostIP6;
-            //     ci.host = ba::ip::address::from_string(hoststr);
-            // } else if (boost::regex_match(hoststr.c_str(), n, re4)) {
-            //     ci.type = HostIP4;
-            //     ci.host = ba::ip::address::from_string(hoststr);
-            // } else if (boost::regex_match(hoststr.c_str(), n, rehost)) {
-            //     ci.type = HostName;
-            //     // XXX support hostnames in config file
-            //     std::cerr << "support for hostnames NYI\n";
-            //     continue;
-            // } else
-            //     continue; // invalid
             try {
                 ci.host = ba::ip::address::from_string(hoststr);
                 ci.type = ci.host.is_v4() ? HostIP4 : HostIP6;
             } catch (boost::system::error_code &ec) {
-                continue;
+                if (boost::regex_match(hoststr.c_str(), n, rehost)) {
+                    ci.type = HostName;
+                    // XXX support hostnames in config file
+                    std::cerr << "support for hostnames NYI\n";
+                    continue;
+                }
+                continue; // invalid
             }
 
             mask << std::dec << m[2];
