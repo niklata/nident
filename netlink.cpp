@@ -1,5 +1,5 @@
 /* netlink.cpp - netlink abstraction
- * Time-stamp: <2011-03-29 05:42:02 nk>
+ * Time-stamp: <2011-03-29 05:45:28 nk>
  *
  * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -31,8 +31,6 @@
 #include <unistd.h>
 #include "netlink.hpp"
 namespace ba = boost::asio;
-
-#define BCBUFSIZ 256
 
 Netlink::Netlink() {
     fd_ = -1;
@@ -212,12 +210,8 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
 
     iov[0].iov_base = &req;
     iov[0].iov_len = sizeof req;
-    char bcbuf[BCBUFSIZ];
+    char bcbuf[bclen];
     memset(bcbuf, 0, sizeof bcbuf);
-    if (sizeof bcbuf < bclen) {
-        std::cerr << "get_tcp_uid: abnormally large bytecode buffer size\n";
-        return uid;
-    }
     if (sa.is_v4()) {
         create_bc(bcbuf, sa.to_v4().to_bytes().data(), salen, sp,
                   da.to_v4().to_bytes().data(), dalen, dp);
