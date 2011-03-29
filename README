@@ -28,17 +28,17 @@ LICENSE
 REQUIREMENTS
 ------------
 
-Linux kernel (tested: 2.6.36-2.6.38)
-C99 C compiler (tested: gcc 4.5-4.6)
-C++03 C++ compiler (tested: gcc 4.5-4.6)
+Linux kernel (tested: 2.6.36 - 2.6.38)
+C99 C compiler (tested: gcc 4.5.0 - 4.6.0)
+C++03 C++ compiler (tested: gcc 4.5.0 - 4.6.0)
 CMake (tested: 2.8.1)
-Boost (tested: 1.42)
+Boost (tested: 1.42 - 1.46.1)
 
 PORTABILITY
 -----------
 
 nidentd could be ported to non-Linux systems, but will require new code
-to replace the /proc/net/tcp6? mechanism used in Linux.
+to replace the netlink mechanism used in Linux.
 
 INTRODUCTION
 ------------
@@ -58,6 +58,8 @@ Buzzword compliance:
     * supports validated spoofed responses
     * does not require inetd
     * syslog logging of responses
+    * supports chrooting the ident daemon
+    * uses netlink sockets instead of procfs
 
 I have tried to pay particular attention to ensuring that nident is not only
 paranoid, but also secure.  nident will refuse to run with root privileges,
@@ -72,8 +74,8 @@ socket buffers in the kernel -- nident stops and replies with error at the
 first byte that is invalid).  nident also limits the number of concurrent
 connections allowed.
 
-USAGE
------
+STANDARD USAGE
+--------------
 
 1) Compile and install nident.
     a) mkdir build
@@ -87,17 +89,57 @@ USAGE
 
    Examples:
 
-	 nident -P -p 113 -u ident -g ident
+	 nident -p -u ident -g ident
 
    The above would run nident under the uid and default gid for user
    'ident' so that it was listening for connections on all interfaces
    on port 113 (auth).  All errors except for ERROR:INVALID-PORT would
    be reported as ERROR:UNKNOWN-ERROR for extra security.
 
+         nident -u ident -g ident 127.0.0.1:156 ::1:777
+
+   The above would run nident under the uid and default gid for user 'ident'
+   so that it was listening for connections on two address and port pairs:
+   127.0.0.1 (v4 loopback) port 156 and ::1 (v6 loopback) port 777.
+
 3) (Optional) Configure your syslog to log ident replies to a unique file.
 
    This will vary depending on your system syslogd.  nident logs using a
    name of "nident" (surprising, I know).
+
+USING CHROOT
+------------
+
+1) First, set up nident as described above, and make sure that it is working.
+   Setting up chroots can be tricky, and it's best to start from a working
+   setup.
+
+2) Decide on a directory to use for the chroot.  This directory will need to
+   contain your per-user ident configuration files.  It should be readable
+   and executable for the ident user, and the configuration files within
+   should only be readable by the ident user.  Each configuration file should
+   be owned by the matching user account, and the chroot directory should
+   be owned by root.
+
+   Example:
+
+   This assumes that the ident daemon is running with a user account id that
+   does not equal 0 or 1000, and that there is a single user, with user account
+   id equal to 1000, that is allowed to specify proper ident replies.
+
+   mkdir -p /var/jail/ident
+   chown root.root /var/jail/ident
+   chmod 755 /var/jail/ident
+   touch /var/jail/ident/1000
+   chown 1000 /var/jail/ident/1000
+   chmod 644  /var/jail/ident/1000
+
+3) For convenience, the user should have an .ident symlink in their home
+   directory to the configuration file.
+
+note) The uid must be used for the configuration file names, not the actual
+      string name of the user.  This restriction exists because the ident
+      daemon does not have access to /etc/passwd from within the jail.
 
 USER CONFIGURATION
 ------------------
