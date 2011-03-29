@@ -1,5 +1,5 @@
 /* netlink.cpp - netlink abstraction
- * Time-stamp: <2011-03-29 00:59:13 nk>
+ * Time-stamp: <2011-03-29 02:40:13 nk>
  *
  * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -90,7 +90,6 @@ bool Netlink::open(int socktype)
 {
     std::cerr << "entered Netlink::open()\n";
     if (fd_ != -1) {
-        std::cerr << "Netlink::open(): fd_ != -1\n";
         if (socktype_ == socktype) {
             std::cerr << "Netlink::open(): existing socket OK\n";
             return true;
@@ -190,6 +189,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     struct msghdr msg;
     struct rtattr rta;
     unsigned int this_seq = seq_++;
+    std::cout << "this seq = " << this_seq << std::endl;
 
     struct sockaddr_nl nladdr;
     memset(&nladdr, 0, sizeof nladdr);
@@ -248,10 +248,10 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     if (rbytes < 0) {
         std::cerr << "get_tcp_uid: recvmsg() error: " << strerror(errno)
                   << std::endl;
-        delete[] bcbuf;
         return uid;
     }
 
+  again:
     for (nlh = reinterpret_cast<struct nlmsghdr *>(buf);
          nlmsg_ok(nlh, rbytes); nlh = nlmsg_next(nlh, rbytes)) {
         std::cerr << "Got a netlink reply!\n";
@@ -261,10 +261,11 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
             continue;
         }
         if (nlh->nlmsg_seq != this_seq) {
-            std::cerr << "get_tcp_uid: bad seq: " << this_seq << std::endl;
+            std::cerr << "get_tcp_uid: bad seq: " << nlh->nlmsg_seq
+                      << " != " << this_seq << std::endl;
             continue;
         }
-        std::cerr << "  -> sequence and portid passed\n";
+        std::cerr << "  -> sequence (" << this_seq << ") and portid passed\n";
 
         if (nlh->nlmsg_type == TCPDIAG_GETSOCK) {
             struct inet_diag_msg *r = (struct inet_diag_msg *)NLMSG_DATA(nlh);
@@ -299,8 +300,11 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
             uid = r->idiag_uid;
             std::cout << "src: " << saddr << ":" << sport << " dst: "
                       << daddr << ":" << dport << std::endl;
+            while (recvmsg(fd_, &msg, MSG_DONTWAIT) >= 0);
             break;
         }
     }
+    if (uid == -1 && (recvmsg(fd_, &msg, MSG_DONTWAIT) >= 0))
+        goto again;
     return uid;
 }
