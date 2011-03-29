@@ -1,5 +1,5 @@
 /* netlink.hpp - netlink abstraction
- * Time-stamp: <2011-03-29 00:51:03 nk>
+ * Time-stamp: <2011-03-29 05:41:59 nk>
  *
  * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -44,12 +44,12 @@ public:
     int get_tcp_uid(boost::asio::ip::address sa, unsigned short sp,
                     boost::asio::ip::address da, unsigned short dp);
 private:
-    bool nlmsg_ok(const struct nlmsghdr *nlh, int len) const;
+    bool nlmsg_ok(const struct nlmsghdr *nlh, size_t len) const;
     struct nlmsghdr *nlmsg_next(const struct nlmsghdr *nlh, int &len);
-    int bc_size(int salen, int calen) const;
-    int create_bc(char *bcbase, unsigned char *sabytes, int salen,
-                  uint16_t sport, unsigned char *cabytes, int calen,
-                  uint16_t dport);
+    size_t bc_size(size_t salen, size_t calen) const;
+    size_t create_bc(char *bcbase, unsigned char *sabytes, size_t salen,
+                     uint16_t sport, unsigned char *cabytes, size_t calen,
+                     uint16_t dport) const;
     enum {
         TCPF_ESTABLISHED = (1 << 1),
         TCPF_SYN_SENT    = (1 << 2),

@@ -1,5 +1,5 @@
 /* netlink.cpp - netlink abstraction
- * Time-stamp: <2011-03-29 03:33:20 nk>
+ * Time-stamp: <2011-03-29 05:42:02 nk>
  *
  * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -32,6 +32,8 @@
 #include "netlink.hpp"
 namespace ba = boost::asio;
 
+#define BCBUFSIZ 256
+
 Netlink::Netlink() {
     fd_ = -1;
     socktype_ = -1;
@@ -41,24 +43,24 @@ Netlink::~Netlink() {
     close(fd_);
 }
 
-int Netlink::bc_size(int salen, int calen) const
+size_t Netlink::bc_size(size_t salen, size_t calen) const
 {
     return 12 + 2 * sizeof (struct inet_diag_hostcond) + salen + calen;
 }
 
 // Returns the length of the message stored in bcbase or 0 on failure.
-int Netlink::create_bc(char *bcbase, unsigned char *sabytes, int salen,
-                       uint16_t sport, unsigned char *cabytes, int calen,
-                       uint16_t dport)
+size_t Netlink::create_bc(char *bcbase, unsigned char *sabytes, size_t salen,
+                          uint16_t sport, unsigned char *cabytes, size_t calen,
+                          uint16_t dport) const
 {
     if (!sabytes || (salen != 4 && salen != 16))
         return 0;
     if (!cabytes && (calen != 4 && calen != 16))
         return 0;
 
-    int blenp = bc_size(salen, calen);
+    size_t blenp = bc_size(salen, calen);
     struct inet_diag_bc_op *op0 = (struct inet_diag_bc_op *)bcbase;
-    int oplen0 = salen + 4 + sizeof (struct inet_diag_hostcond);
+    size_t oplen0 = salen + 4 + sizeof (struct inet_diag_hostcond);
     op0->code = INET_DIAG_BC_S_COND;
     op0->yes = oplen0;
     op0->no = oplen0 + 4;
@@ -73,7 +75,7 @@ int Netlink::create_bc(char *bcbase, unsigned char *sabytes, int salen,
     link0->no = blenp - (((char *)link0) - ((char *)op0));
 
     struct inet_diag_bc_op *op1 = (struct inet_diag_bc_op *)(((char *)link0) + 4);
-    int oplen1 = calen + 4 + sizeof (struct inet_diag_hostcond);
+    size_t oplen1 = calen + 4 + sizeof (struct inet_diag_hostcond);
     op1->code = INET_DIAG_BC_D_COND;
     op1->yes = oplen1;
     op1->no = oplen1 + 4;
@@ -142,11 +144,11 @@ bool Netlink::open(int socktype)
     return false;
 }
 
-bool Netlink::nlmsg_ok(const struct nlmsghdr *nlh, int len) const
+bool Netlink::nlmsg_ok(const struct nlmsghdr *nlh, size_t len) const
 {
-    return len >= (int)sizeof(struct nlmsghdr) &&
+    return len >= sizeof(struct nlmsghdr) &&
         nlh->nlmsg_len >= sizeof(struct nlmsghdr) &&
-        (int)nlh->nlmsg_len <= len;
+        nlh->nlmsg_len <= len;
 }
 
 #define NLK_ALIGNTO             4
@@ -167,7 +169,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
         return uid;
     }
 
-    int salen, dalen;
+    size_t salen, dalen;
     bool sa6mapped = false, da6mapped = false;
     if (sa.is_v4()) {
         salen = dalen = 4;
@@ -177,7 +179,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
         salen = sa6mapped ? 4 : 16;
         dalen = da6mapped ? 4 : 16;
     }
-    int bclen = bc_size(salen, dalen);
+    size_t bclen = bc_size(salen, dalen);
 
     if (!open(NETLINK_INET_DIAG)) {
         std::cerr << "failed to create netlink socket" << std::endl;
@@ -210,8 +212,12 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
 
     iov[0].iov_base = &req;
     iov[0].iov_len = sizeof req;
-    char *bcbuf = new char[bclen];
-    memset(bcbuf, 0, bclen);
+    char bcbuf[BCBUFSIZ];
+    memset(bcbuf, 0, sizeof bcbuf);
+    if (sizeof bcbuf < bclen) {
+        std::cerr << "get_tcp_uid: abnormally large bytecode buffer size\n";
+        return uid;
+    }
     if (sa.is_v4()) {
         create_bc(bcbuf, sa.to_v4().to_bytes().data(), salen, sp,
                   da.to_v4().to_bytes().data(), dalen, dp);
@@ -239,10 +245,8 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     if (sendmsg(fd_, &msg, 0) < 0) {
         std::cerr << "get_tcp_uid: sendmsg() error: " << strerror(errno)
                   << std::endl;
-        delete[] bcbuf;
         return uid;
     }
-    delete[] bcbuf;
 
     char buf[8192];
     iov[0].iov_base = buf;
