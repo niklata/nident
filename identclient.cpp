@@ -1,5 +1,4 @@
 /* identclient.cpp - ident client request handling
- * Time-stamp: <2011-03-29 01:11:35 nk>
  *
  * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.

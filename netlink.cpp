@@ -1,5 +1,4 @@
 /* netlink.cpp - netlink abstraction
- * Time-stamp: <2011-03-29 08:20:25 nk>
  *
  * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -254,13 +253,20 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
 
     size_t salen, dalen;
     bool sa6mapped = false, da6mapped = false;
+    unsigned char *sabytes, *dabytes;
     if (sa.is_v4()) {
         salen = dalen = 4;
+        sabytes = sa.to_v4().to_bytes().data();
+        dabytes = da.to_v4().to_bytes().data();
     } else {
         sa6mapped = sa.to_v6().is_v4_mapped();
         da6mapped = da.to_v6().is_v4_mapped();
         salen = sa6mapped ? 4 : 16;
         dalen = da6mapped ? 4 : 16;
+        sabytes = sa6mapped ? sa.to_v6().to_v4().to_bytes().data() :
+                              sa.to_v6().to_bytes().data();
+        dabytes = da6mapped ? da.to_v6().to_v4().to_bytes().data() :
+                              da.to_v6().to_bytes().data();
     }
     size_t bclen = bc_size(salen, dalen);
 
@@ -297,16 +303,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     iov[0].iov_len = sizeof req;
     char bcbuf[bclen];
     memset(bcbuf, 0, sizeof bcbuf);
-    if (sa.is_v4()) {
-        create_bc(bcbuf, sa.to_v4().to_bytes().data(), salen, sp,
-                  da.to_v4().to_bytes().data(), dalen, dp);
-    } else {
-        auto sb = sa.to_v6().is_v4_mapped() ?
-            sa.to_v6().to_v4().to_bytes().data() : sa.to_v6().to_bytes().data();
-        auto db = da.to_v6().is_v4_mapped() ?
-            da.to_v6().to_v4().to_bytes().data() : da.to_v6().to_bytes().data();
-        create_bc(bcbuf, sb, salen, sp, db, dalen, dp);
-    }
+    create_bc(bcbuf, sabytes, salen, sp, dabytes, dalen, dp);
     rta.rta_type = INET_DIAG_REQ_BYTECODE;
     rta.rta_len = RTA_LENGTH(bclen);
     iov[1].iov_base = &rta;
@@ -397,7 +394,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                 memcpy(s6b.data(), r->id.idiag_src, 16);
                 memcpy(d6b.data(), r->id.idiag_dst, 16);
                 saddr = ba::ip::address(ba::ip::address_v6(s6b));
-                daddr = ba::ip::address(ba::ip::address_v6(s6b));
+                daddr = ba::ip::address(ba::ip::address_v6(d6b));
                 if (saddr != sa) {
                     std::cerr << "get_tcp_uid: v6 src addresses do not match\n";
                     continue;
@@ -408,8 +405,6 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                 }
             }
             uid = r->idiag_uid;
-            // std::cout << "src: " << saddr << ":" << sport << " dst: "
-            //           << daddr << ":" << dport << std::endl;
             while (recvmsg(fd_, &msg, MSG_DONTWAIT) >= 0);
             break;
         }
