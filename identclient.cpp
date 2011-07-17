@@ -320,7 +320,7 @@ ClientListener::ClientListener(const ba::ip::tcp::endpoint &endpoint)
 void ClientListener::start_accept()
 {
     boost::shared_ptr<IdentClient> conn(
-        new IdentClient(acceptor_.io_service()));
+        new IdentClient(acceptor_.get_io_service()));
     acceptor_.async_accept(conn->socket(), boost::bind(
                                &ClientListener::accept_handler, this,
                                conn, ba::placeholders::error));
