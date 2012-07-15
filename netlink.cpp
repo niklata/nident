@@ -1,6 +1,6 @@
 /* netlink.cpp - netlink abstraction
  *
- * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2011-2012 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,8 @@ Netlink::~Netlink() {
 
 size_t Netlink::bc_size(size_t salen, size_t calen) const
 {
-    return 12 + 2 * sizeof (struct inet_diag_hostcond) + salen + calen;
+    return 2 * sizeof(struct inet_diag_bc_op) +
+           2 * sizeof (struct inet_diag_hostcond) + salen + calen;
 }
 
 // Returns the length of the message stored in bcbase or 0 on failure.
@@ -50,39 +51,42 @@ size_t Netlink::create_bc(char *bcbase, unsigned char *sabytes, size_t salen,
                           uint16_t sport, unsigned char *cabytes, size_t calen,
                           uint16_t dport) const
 {
-    if (!sabytes || (salen != 4 && salen != 16))
+    if (!sabytes || (salen != 4 && salen != 16)) {
+        std::cerr << "sabytes == NULL or salen size invalid" << std::endl;
         return 0;
-    if (!cabytes && (calen != 4 && calen != 16))
+    }
+    if (!cabytes && (calen != 4 && calen != 16)) {
+        std::cerr << "cabytes == NULL or calen size invalid" << std::endl;
         return 0;
+    }
 
-    size_t blenp = bc_size(salen, calen);
+    const size_t blenp = bc_size(salen, calen);
+    const size_t opsize = sizeof(struct inet_diag_bc_op);
+    const size_t condsize = sizeof(struct inet_diag_hostcond);
+    const size_t oplen0 = salen + opsize + condsize;
+    const size_t oplen1 = calen + opsize + condsize;
+
     struct inet_diag_bc_op *op0 = (struct inet_diag_bc_op *)bcbase;
-    size_t oplen0 = salen + 4 + sizeof (struct inet_diag_hostcond);
     op0->code = INET_DIAG_BC_S_COND;
     op0->yes = oplen0;
-    op0->no = oplen0 + 4;
-    struct inet_diag_hostcond *cond0 = (struct inet_diag_hostcond*)(bcbase + 4);
+    op0->no = blenp + 4;
+    struct inet_diag_hostcond *cond0 = (struct inet_diag_hostcond*)((char *)op0 + opsize);
     cond0->family = (salen == 16 ? AF_INET6 : AF_INET);
     cond0->port = sport;
-    cond0->prefix_len = salen * 8;
+    cond0->prefix_len = 0;
     memcpy(cond0->addr, sabytes, salen);
-    struct inet_diag_bc_op *link0 = (struct inet_diag_bc_op *)(((char *)op0) + op0->yes);
-    link0->code = INET_DIAG_BC_JMP;
-    link0->yes = 4;
-    link0->no = blenp - (((char *)link0) - ((char *)op0));
 
-    struct inet_diag_bc_op *op1 = (struct inet_diag_bc_op *)(((char *)link0) + 4);
-    size_t oplen1 = calen + 4 + sizeof (struct inet_diag_hostcond);
+    struct inet_diag_bc_op *op1 = (struct inet_diag_bc_op *)((char *)bcbase + oplen0);
     op1->code = INET_DIAG_BC_D_COND;
     op1->yes = oplen1;
     op1->no = oplen1 + 4;
-    struct inet_diag_hostcond *cond1 = (struct inet_diag_hostcond*)(((char *)op1) + 4);
+    struct inet_diag_hostcond *cond1 = (struct inet_diag_hostcond*)((char *)op1 + opsize);
     cond1->family = (calen == 16 ? AF_INET6 : AF_INET);
     cond1->port = dport;
-    cond1->prefix_len = calen * 8;
+    cond1->prefix_len = 0;
     memcpy(cond1->addr, cabytes, calen);
 
-    return (op1 + op1->yes) - op0;
+    return blenp;
 }
 
 bool Netlink::open(int socktype)
@@ -252,21 +256,15 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     }
 
     size_t salen, dalen;
-    bool sa6mapped = false, da6mapped = false;
     unsigned char *sabytes, *dabytes;
     if (sa.is_v4()) {
         salen = dalen = 4;
         sabytes = sa.to_v4().to_bytes().data();
         dabytes = da.to_v4().to_bytes().data();
     } else {
-        sa6mapped = sa.to_v6().is_v4_mapped();
-        da6mapped = da.to_v6().is_v4_mapped();
-        salen = sa6mapped ? 4 : 16;
-        dalen = da6mapped ? 4 : 16;
-        sabytes = sa6mapped ? sa.to_v6().to_v4().to_bytes().data() :
-                              sa.to_v6().to_bytes().data();
-        dabytes = da6mapped ? da.to_v6().to_v4().to_bytes().data() :
-                              da.to_v6().to_bytes().data();
+        salen = dalen = 16;
+        sabytes = sa.to_v6().to_bytes().data();
+        dabytes = da.to_v6().to_bytes().data();
     }
     size_t bclen = bc_size(salen, dalen);
 
@@ -330,7 +328,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     msg.msg_iov = iov;
     msg.msg_iovlen = 1;
 
-    int rbytes = recvmsg(fd_, &msg, 0);
+    int rbytes = recvmsg(fd_, &msg, MSG_WAITALL);
     if (rbytes < 0) {
         std::cerr << "get_tcp_uid: recvmsg() error: " << strerror(errno)
                   << std::endl;
@@ -351,65 +349,72 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
             continue;
         }
 
+        if (nlh->nlmsg_type == NLMSG_DONE)
+            break;
+        if (nlh->nlmsg_type == NLMSG_ERROR) {
+            std::cerr << "get_tcp_uid: received NLMSG_ERROR reply" << std::endl;
+            break;
+        }
+
         if (nlh->nlmsg_type == TCPDIAG_GETSOCK) {
             struct inet_diag_msg *r = (struct inet_diag_msg *)NLMSG_DATA(nlh);
 
             unsigned short sport = ntohs(r->id.idiag_sport);
             unsigned short dport = ntohs(r->id.idiag_dport);
             if (sport != sp || dport != dp) {
-                std::cerr << "get_tcp_uid: ports do not match " << std::endl;
+                std::cerr << "get_tcp_uid: ports (sp,dp)=(" << sp << "," << dp << ") != (" << sport << "," << dport << ")" << std::endl;
                 continue;
             }
+
             ba::ip::address saddr, daddr;
+            ba::ip::address_v6 s6, d6;
             if (r->idiag_family == AF_INET) {
                 ba::ip::address_v4::bytes_type s4b, d4b;
                 memcpy(s4b.data(), r->id.idiag_src, 4);
                 memcpy(d4b.data(), r->id.idiag_dst, 4);
                 auto s4 = ba::ip::address_v4(s4b);
                 auto d4 = ba::ip::address_v4(d4b);
-                saddr = ba::ip::address(s4);
-                daddr = ba::ip::address(d4);
-                if (sa6mapped) {
-                    auto sa4 = sa.to_v6().to_v4();
-                    if (sa4 != s4) {
-                        std::cerr << "get_tcp_uid: v4-mapped src addresses do not match\n";
-                        continue;
-                    }
-                } else if (saddr != sa) {
-                    std::cerr << "get_tcp_uid: v4 src addresses do not match\n";
-                    continue;
-                }
-                if (da6mapped) {
-                    auto da4 = da.to_v6().to_v4();
-                    if (da4 != d4) {
-                        std::cerr << "get_tcp_uid: v4-mapped dst addresses do not match\n";
-                        continue;
-                    }
-                } else if (daddr != da) {
-                    std::cerr << "get_tcp_uid: v4 dst addresses do not match\n";
-                    continue;
-                }
+                s6 = ba::ip::address_v6::v4_mapped(s4);
+                d6 = ba::ip::address_v6::v4_mapped(d4);
             } else {
                 ba::ip::address_v6::bytes_type s6b, d6b;
                 memcpy(s6b.data(), r->id.idiag_src, 16);
                 memcpy(d6b.data(), r->id.idiag_dst, 16);
-                saddr = ba::ip::address(ba::ip::address_v6(s6b));
-                daddr = ba::ip::address(ba::ip::address_v6(d6b));
-                if (saddr != sa) {
-                    std::cerr << "get_tcp_uid: v6 src addresses do not match\n";
-                    continue;
-                }
-                if (daddr != da) {
-                    std::cerr << "get_tcp_uid: v6 dst addresses do not match\n";
-                    continue;
-                }
+                s6 = ba::ip::address_v6(s6b);
+                d6 = ba::ip::address_v6(d6b);
             }
+            if (sa.is_v4()) {
+                if (s6.is_v4_mapped())
+                    saddr = ba::ip::address(s6.to_v4());
+                else
+                    saddr = ba::ip::address(s6);
+                if (d6.is_v4_mapped())
+                    daddr = ba::ip::address(d6.to_v4());
+                else
+                    daddr = ba::ip::address(d6);
+            } else {
+                saddr = ba::ip::address(s6);
+                daddr = ba::ip::address(d6);
+            }
+            if (saddr != sa) {
+                std::cerr << "get_tcp_uid: v6 src addresses do not match: " << saddr << " != " << sa << std::endl;
+                continue;
+            }
+            if (daddr != da) {
+                std::cerr << "get_tcp_uid: v6 dst addresses do not match: " << daddr << " != " << da << std::endl;
+                continue;
+            }
+
             uid = r->idiag_uid;
             while (recvmsg(fd_, &msg, MSG_DONTWAIT) >= 0);
             break;
         }
     }
-    if (uid == -1 && (recvmsg(fd_, &msg, MSG_DONTWAIT) >= 0))
+    iov[0].iov_base = buf;
+    iov[0].iov_len = sizeof buf;
+    msg.msg_iov = iov;
+    msg.msg_iovlen = 1;
+    if (uid == -1 && ((rbytes = recvmsg(fd_, &msg, MSG_DONTWAIT)) >= 0))
         goto again;
     return uid;
 }

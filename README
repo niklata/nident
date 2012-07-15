@@ -206,7 +206,7 @@ example of .ident:
 
 The first rule will match any host asking about any of our connections to its
 ports 6667, 6668, 6669, or 7000.  nident will reply to these queries with an
-eight character Tiger-derived hash constructed from the username that owns the
+eight character BLAKE-derived hash constructed from the username that owns the
 connection, the ip of the machine making the query, and the port number to
 which we are connected.  This rule would perhaps be useful for connecting to
 irc servers that demand an ident response, as the hash will be the same on
