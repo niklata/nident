@@ -40,51 +40,38 @@ Netlink::~Netlink() {
     close(fd_);
 }
 
-size_t Netlink::bc_size(size_t salen, size_t calen) const
+size_t Netlink::bc_size() const
 {
-    return 2 * sizeof(struct inet_diag_bc_op) +
-           2 * sizeof (struct inet_diag_hostcond) + salen + calen;
+    return 2*(sizeof(struct inet_diag_bc_op)+sizeof(struct inet_diag_hostcond));
 }
 
 // Returns the length of the message stored in bcbase or 0 on failure.
-size_t Netlink::create_bc(char *bcbase, unsigned char *sabytes, size_t salen,
-                          uint16_t sport, unsigned char *cabytes, size_t calen,
+size_t Netlink::create_bc(char *bcbase, bool ipv4_sada, uint16_t sport,
                           uint16_t dport) const
 {
-    if (!sabytes || (salen != 4 && salen != 16)) {
-        std::cerr << "sabytes == NULL or salen size invalid" << std::endl;
-        return 0;
-    }
-    if (!cabytes && (calen != 4 && calen != 16)) {
-        std::cerr << "cabytes == NULL or calen size invalid" << std::endl;
-        return 0;
-    }
-
-    const size_t blenp = bc_size(salen, calen);
+    const size_t blenp = bc_size();
     const size_t opsize = sizeof(struct inet_diag_bc_op);
     const size_t condsize = sizeof(struct inet_diag_hostcond);
-    const size_t oplen0 = salen + opsize + condsize;
-    const size_t oplen1 = calen + opsize + condsize;
+    const size_t oplen0 = opsize + condsize;
+    const size_t oplen1 = opsize + condsize;
 
     struct inet_diag_bc_op *op0 = (struct inet_diag_bc_op *)bcbase;
     op0->code = INET_DIAG_BC_S_COND;
     op0->yes = oplen0;
     op0->no = blenp + 4;
     struct inet_diag_hostcond *cond0 = (struct inet_diag_hostcond*)((char *)op0 + opsize);
-    cond0->family = (salen == 16 ? AF_INET6 : AF_INET);
+    cond0->family = (ipv4_sada ? AF_INET : AF_INET6);
     cond0->port = sport;
     cond0->prefix_len = 0;
-    memcpy(cond0->addr, sabytes, salen);
 
     struct inet_diag_bc_op *op1 = (struct inet_diag_bc_op *)((char *)bcbase + oplen0);
     op1->code = INET_DIAG_BC_D_COND;
     op1->yes = oplen1;
     op1->no = oplen1 + 4;
     struct inet_diag_hostcond *cond1 = (struct inet_diag_hostcond*)((char *)op1 + opsize);
-    cond1->family = (calen == 16 ? AF_INET6 : AF_INET);
+    cond1->family = (ipv4_sada ? AF_INET : AF_INET6);
     cond1->port = dport;
     cond1->prefix_len = 0;
-    memcpy(cond1->addr, cabytes, calen);
 
     return blenp;
 }
@@ -250,23 +237,18 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
 {
     int uid = -1;
     if (sa.is_v6() != da.is_v6()) {
+    }
+
+    bool ipv4_sada;
+    if (sa.is_v4() && da.is_v4()) {
+        ipv4_sada = true;
+    } else if (sa.is_v6() && da.is_v6()) {
+        ipv4_sada = false;
+    } else {
         std::cerr << "saddr and daddr must both be IPv4 or both be IPv6"
                   << std::endl;
         return uid;
     }
-
-    size_t salen, dalen;
-    unsigned char *sabytes, *dabytes;
-    if (sa.is_v4()) {
-        salen = dalen = 4;
-        sabytes = sa.to_v4().to_bytes().data();
-        dabytes = da.to_v4().to_bytes().data();
-    } else {
-        salen = dalen = 16;
-        sabytes = sa.to_v6().to_bytes().data();
-        dabytes = da.to_v6().to_bytes().data();
-    }
-    size_t bclen = bc_size(salen, dalen);
 
     if (!open(NETLINK_INET_DIAG)) {
         std::cerr << "failed to create netlink socket" << std::endl;
@@ -299,16 +281,17 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
 
     iov[0].iov_base = &req;
     iov[0].iov_len = sizeof req;
+    size_t bclen = bc_size();
     char bcbuf[bclen];
     memset(bcbuf, 0, sizeof bcbuf);
-    create_bc(bcbuf, sabytes, salen, sp, dabytes, dalen, dp);
+    create_bc(bcbuf, ipv4_sada, sp, dp);
     rta.rta_type = INET_DIAG_REQ_BYTECODE;
     rta.rta_len = RTA_LENGTH(bclen);
     iov[1].iov_base = &rta;
     iov[1].iov_len = sizeof rta;
     iov[2].iov_base = bcbuf;
     iov[2].iov_len = bclen;
-    req.nlh.nlmsg_len += RTA_LENGTH(bclen);
+    req.nlh.nlmsg_len += rta.rta_len;
 
     memset(&msg, 0, sizeof msg);
     msg.msg_name = (void*)&nladdr;

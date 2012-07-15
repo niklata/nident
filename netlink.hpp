@@ -47,9 +47,8 @@ public:
 private:
     bool nlmsg_ok(const struct nlmsghdr *nlh, size_t len) const;
     struct nlmsghdr *nlmsg_next(const struct nlmsghdr *nlh, int &len);
-    size_t bc_size(size_t salen, size_t calen) const;
-    size_t create_bc(char *bcbase, unsigned char *sabytes, size_t salen,
-                     uint16_t sport, unsigned char *cabytes, size_t calen,
+    size_t bc_size() const;
+    size_t create_bc(char *bcbase, bool ipv4_sada, uint16_t sport,
                      uint16_t dport) const;
     enum {
         TCPF_ESTABLISHED = (1 << 1),
