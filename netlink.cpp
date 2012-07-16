@@ -171,7 +171,7 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
     send(fd_, (void*)&req, sizeof req, 0); // check errors
 
     char buf[8192];
-    int rbytes = recv(fd_, buf, sizeof buf, 0);
+    int rbytes = recv(fd_, buf, sizeof buf, MSG_WAITALL);
     if (rbytes < 0) {
         std::cerr << "get_if_stats: recv() error: " << strerror(errno)
                   << std::endl;
@@ -190,6 +190,13 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
             std::cerr << "get_if_stats: bad seq: " << nlh->nlmsg_seq
                       << " != " << this_seq << std::endl;
             continue;
+        }
+
+        if (nlh->nlmsg_type == NLMSG_DONE)
+            break;
+        if (nlh->nlmsg_type == NLMSG_ERROR) {
+            std::cerr << "get_if_stats: received NLMSG_ERROR reply" << std::endl;
+            break;
         }
 
         if (nlh->nlmsg_type == RTM_NEWLINK) {
@@ -227,7 +234,7 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
             return true;
         }
     }
-    if (recv(fd_, buf, sizeof buf, MSG_DONTWAIT) >= 0)
+    if ((rbytes = recv(fd_, buf, sizeof buf, MSG_DONTWAIT)) >= 0)
         goto again;
     return false;
 }
