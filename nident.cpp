@@ -1,7 +1,7 @@
 /* nident.c - ident server
- * Time-stamp: <2011-03-29 03:36:05 nk>
+ * Time-stamp: <2012-07-16 12:52:10 nk>
  *
- * (c) 2004-2011 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2004-2012 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,6 +29,7 @@
 
 #define NIDENT_VERSION "1.0"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -72,7 +73,7 @@ extern "C" {
 namespace po = boost::program_options;
 
 boost::asio::io_service io_service;
-Netlink *nlink;
+std::unique_ptr<Netlink> nlink;
 bool gParanoid = false;
 bool gChrooted = false;
 
@@ -107,7 +108,7 @@ static void fix_signals(void) {
 int main(int ac, char *av[]) {
     int uid = 0, gid = 0;
     std::string pidfile, chroot_path;
-    std::vector<ClientListener *> listeners;
+    std::vector<std::unique_ptr<ClientListener>> listeners;
     std::vector<std::string> addrlist;
 
     gflags_log_name = const_cast<char *>("nident");
@@ -147,14 +148,14 @@ int main(int ac, char *av[]) {
 
     if (vm.count("help")) {
         std::cout << "nident " << NIDENT_VERSION << ", ident server.\n"
-		  << "Copyright (c) 2010-2011 Nicholas J. Kain\n"
+		  << "Copyright (c) 2010-2012 Nicholas J. Kain\n"
 		  << av[0] << " [options] addresses...\n"
 		  << desc << std::endl;
         return 1;
     }
     if (vm.count("version")) {
 	std::cout << "nident " << NIDENT_VERSION << ", ident server.\n" <<
-	    "Copyright (c) 2010-2011 Nicholas J. Kain\n"
+	    "Copyright (c) 2010-2012 Nicholas J. Kain\n"
 	    "All rights reserved.\n\n"
 	    "Redistribution and use in source and binary forms, with or without\n"
 	    "modification, are permitted provided that the following conditions are met:\n\n"
@@ -235,8 +236,8 @@ int main(int ac, char *av[]) {
 
     if (!addrlist.size()) {
 	auto ep = boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v6(), 113);
-	auto cl = new ClientListener(ep);
-	listeners.push_back(cl);
+	listeners.emplace_back(std::unique_ptr<ClientListener>(
+				   new ClientListener(ep)));
     } else
 	for (auto i = addrlist.cbegin(); i != addrlist.cend(); ++i) {
 	    std::string addr = *i;
@@ -255,18 +256,17 @@ int main(int ac, char *av[]) {
 	    try {
 		auto addy = boost::asio::ip::address::from_string(addr);
 		auto ep = boost::asio::ip::tcp::endpoint(addy, port);
-		auto cl = new ClientListener(ep);
-		listeners.push_back(cl);
+		listeners.emplace_back(std::unique_ptr<ClientListener>(
+					    new ClientListener(ep)));
 	    } catch (boost::system::error_code &ec) {
 		std::cout << "bad address: " << addr << std::endl;
 	    }
 	}
     addrlist.clear();
 
-    nlink = new Netlink;
+    nlink = std::unique_ptr<Netlink>(new Netlink);
     if (!nlink->open(NETLINK_INET_DIAG)) {
 	std::cerr << "failed to create netlink socket" << std::endl;
-	delete nlink;
 	exit(EXIT_FAILURE);
     }
 
@@ -288,7 +288,6 @@ int main(int ac, char *av[]) {
 
     io_service.run();
 
-    delete nlink;
     exit(EXIT_SUCCESS);
 }
 
