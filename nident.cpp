@@ -1,5 +1,5 @@
 /* nident.c - ident server
- * Time-stamp: <2012-07-16 12:52:10 nk>
+ * Time-stamp: <2012-07-16 12:57:07 nk>
  *
  * (c) 2004-2012 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define NIDENT_VERSION "1.0"
+#define NIDENT_VERSION "1.1"
 
 #include <memory>
 #include <string>

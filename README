@@ -1,6 +1,6 @@
 LICENSE
 -------
- (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
+ (c) 2010-2012 Nicholas J. Kain <njkain at gmail dot com>
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -28,11 +28,11 @@ LICENSE
 REQUIREMENTS
 ------------
 
-Linux kernel (tested: 2.6.36 - 2.6.38)
-C99 C compiler (tested: gcc 4.5.0 - 4.6.0)
-C++03 C++ compiler (tested: gcc 4.5.0 - 4.6.0)
-CMake (tested: 2.8.1)
-Boost (tested: 1.42 - 1.46.1)
+Linux kernel (tested: 2.6.36 - 3.5)
+C99 C compiler (tested: gcc 4.5.0 - 4.7.1)
+C++03 C++ compiler (tested: gcc 4.5.0 - 4.7.1)
+CMake (tested: 2.8.1 - 2.8.8)
+Boost (tested: 1.42 - 1.50.0)
 
 PORTABILITY
 -----------
