@@ -59,6 +59,7 @@ Buzzword compliance:
     * does not require inetd
     * syslog logging of responses
     * supports chrooting the ident daemon
+    * uses seccomp syscall filters (requires kernel >=3.5 with proper kconfig)
     * uses netlink sockets instead of procfs
 
 I have tried to pay particular attention to ensuring that nident is not only
