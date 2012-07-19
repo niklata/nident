@@ -115,6 +115,7 @@ static void enforce_seccomp(void)
 		ALLOW_SYSCALL(recvmsg),
 		ALLOW_SYSCALL(read),
 		ALLOW_SYSCALL(write),
+		ALLOW_SYSCALL(sendto), // used for glibc syslog routines
 		ALLOW_SYSCALL(epoll_wait),
 		ALLOW_SYSCALL(epoll_ctl),
 		ALLOW_SYSCALL(getpeername),
