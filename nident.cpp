@@ -68,6 +68,7 @@ extern "C" {
 #include "exec.h"
 #include "network.h"
 #include "strlist.h"
+#include "seccomp-bpf.h"
 }
 
 namespace po = boost::program_options;
@@ -103,6 +104,48 @@ static void fix_signals(void) {
     sigaddset(&sa.sa_mask, SIGTERM);
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
+}
+
+static void enforce_seccomp(void)
+{
+	struct sock_filter filter[] = {
+		VALIDATE_ARCHITECTURE,
+		EXAMINE_SYSCALL,
+		ALLOW_SYSCALL(sendmsg),
+		ALLOW_SYSCALL(recvmsg),
+		ALLOW_SYSCALL(read),
+		ALLOW_SYSCALL(write),
+		ALLOW_SYSCALL(epoll_wait),
+		ALLOW_SYSCALL(epoll_ctl),
+		ALLOW_SYSCALL(getpeername),
+		ALLOW_SYSCALL(getsockname),
+		ALLOW_SYSCALL(stat),
+		ALLOW_SYSCALL(open),
+		ALLOW_SYSCALL(close),
+		ALLOW_SYSCALL(connect),
+		ALLOW_SYSCALL(socket),
+		ALLOW_SYSCALL(accept),
+		ALLOW_SYSCALL(ioctl),
+		ALLOW_SYSCALL(rt_sigreturn),
+#ifdef __NR_sigreturn
+		ALLOW_SYSCALL(sigreturn),
+#endif
+		ALLOW_SYSCALL(exit_group),
+		ALLOW_SYSCALL(exit),
+		KILL_PROCESS,
+	};
+	struct sock_fprog prog;
+	memset(&prog, 0, sizeof prog);
+	prog.len = (unsigned short)(sizeof filter / sizeof filter[0]);
+	prog.filter = filter;
+	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) {
+		perror("prctl(NO_NEW_PRIVS)");
+		exit(EXIT_FAILURE);
+	}
+	if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog)) {
+		perror("prctl(PR_SET_SECCOMP)");
+		exit(EXIT_FAILURE);
+	}
 }
 
 int main(int ac, char *av[]) {
@@ -285,6 +328,8 @@ int main(int ac, char *av[]) {
 
     /* Cover our tracks... */
     pidfile.clear();
+
+    enforce_seccomp();
 
     io_service.run();
 
