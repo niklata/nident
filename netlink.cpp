@@ -40,27 +40,31 @@ Netlink::~Netlink() {
     close(fd_);
 }
 
-size_t Netlink::bc_size() const
+size_t Netlink::bc_size(bool ipv4_sada) const
 {
-    return 2*(sizeof(struct inet_diag_bc_op)+sizeof(struct inet_diag_hostcond));
+    const size_t addrsiz = ipv4_sada ? 4 : 16; // bytes
+    return 2 * (sizeof(struct inet_diag_bc_op)
+                + sizeof(struct inet_diag_hostcond) + addrsiz);
 }
 
 // Returns the length of the message stored in bcbase or 0 on failure.
 size_t Netlink::create_bc(char *bcbase, bool ipv4_sada, uint16_t sport,
                           uint16_t dport) const
 {
-    const size_t blenp = bc_size();
+    const size_t blenp = bc_size(ipv4_sada);
+    const size_t addrsiz = ipv4_sada ? 4 : 16; // bytes
     const size_t opsize = sizeof(struct inet_diag_bc_op);
-    const size_t condsize = sizeof(struct inet_diag_hostcond);
+    const size_t condsize = sizeof(struct inet_diag_hostcond) + addrsiz;
     const size_t oplen0 = opsize + condsize;
     const size_t oplen1 = opsize + condsize;
+    const uint8_t afam = (ipv4_sada ? AF_INET : AF_INET6);
 
     struct inet_diag_bc_op *op0 = (struct inet_diag_bc_op *)bcbase;
     op0->code = INET_DIAG_BC_S_COND;
     op0->yes = oplen0;
     op0->no = blenp + 4;
     struct inet_diag_hostcond *cond0 = (struct inet_diag_hostcond*)((char *)op0 + opsize);
-    cond0->family = (ipv4_sada ? AF_INET : AF_INET6);
+    cond0->family = afam;
     cond0->port = sport;
     cond0->prefix_len = 0;
 
@@ -69,7 +73,7 @@ size_t Netlink::create_bc(char *bcbase, bool ipv4_sada, uint16_t sport,
     op1->yes = oplen1;
     op1->no = oplen1 + 4;
     struct inet_diag_hostcond *cond1 = (struct inet_diag_hostcond*)((char *)op1 + opsize);
-    cond1->family = (ipv4_sada ? AF_INET : AF_INET6);
+    cond1->family = afam;
     cond1->port = dport;
     cond1->prefix_len = 0;
 
@@ -288,7 +292,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
 
     iov[0].iov_base = &req;
     iov[0].iov_len = sizeof req;
-    size_t bclen = bc_size();
+    size_t bclen = bc_size(ipv4_sada);
     char bcbuf[bclen];
     memset(bcbuf, 0, sizeof bcbuf);
     create_bc(bcbuf, ipv4_sada, sp, dp);

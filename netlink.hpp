@@ -47,7 +47,7 @@ public:
 private:
     bool nlmsg_ok(const struct nlmsghdr *nlh, size_t len) const;
     struct nlmsghdr *nlmsg_next(const struct nlmsghdr *nlh, int &len);
-    size_t bc_size() const;
+    size_t bc_size(bool ipv4_sada) const;
     size_t create_bc(char *bcbase, bool ipv4_sada, uint16_t sport,
                      uint16_t dport) const;
     enum {
