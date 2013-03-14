@@ -57,7 +57,7 @@ int main(int argc, const char *argv[])
     try {
         po::store(po::command_line_parser(argc, argv).
                   options(desc).positional(p).run(), vm);
-    } catch (std::exception &e) {
+    } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
     }
     po::notify(vm);

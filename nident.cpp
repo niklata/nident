@@ -193,7 +193,7 @@ int main(int ac, char *av[]) {
     try {
         po::store(po::command_line_parser(ac, av).
                   options(desc).positional(p).run(), vm);
-    } catch(std::exception& e) {
+    } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
     }
     po::notify(vm);
@@ -254,7 +254,7 @@ int main(int ac, char *av[]) {
         auto t = vm["user"].as<std::string>();
         try {
             uid = boost::lexical_cast<unsigned int>(t);
-        } catch (boost::bad_lexical_cast &) {
+        } catch (const boost::bad_lexical_cast&) {
             auto pws = getpwnam(t.c_str());
             if (pws) {
                 uid = (int)pws->pw_uid;
@@ -267,7 +267,7 @@ int main(int ac, char *av[]) {
         auto t = vm["group"].as<std::string>();
         try {
             gid = boost::lexical_cast<unsigned int>(t);
-        } catch (boost::bad_lexical_cast &) {
+        } catch (const boost::bad_lexical_cast&) {
             auto grp = getgrnam(t.c_str());
             if (grp) {
                 gid = (int)grp->gr_gid;
@@ -299,7 +299,7 @@ int main(int ac, char *av[]) {
                 auto pstr = addr.substr(loc + 1);
                 try {
                     port = boost::lexical_cast<unsigned short>(pstr);
-                } catch (boost::bad_lexical_cast &) {
+                } catch (const boost::bad_lexical_cast&) {
                     std::cout << "bad port in address '" << addr
                               << "', defaulting to 113" << std::endl;
                 }
@@ -310,7 +310,7 @@ int main(int ac, char *av[]) {
                 auto ep = boost::asio::ip::tcp::endpoint(addy, port);
                 listeners.emplace_back(std::unique_ptr<ClientListener>(
                                             new ClientListener(ep)));
-            } catch (boost::system::error_code &ec) {
+            } catch (const boost::system::error_code&) {
                 std::cout << "bad address: " << addr << std::endl;
             }
         }
