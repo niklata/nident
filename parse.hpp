@@ -78,11 +78,9 @@ public:
         int low_rport;
         int high_rport;
         Policy policy;
-        ConfigItem() {
-            type = HostNone; mask = -1;
-            low_lport = -1; high_lport = -1;
-            low_rport = -1; high_rport = -1;
-        }
+        ConfigItem()
+            : type(HostNone), mask(-1), low_lport(-1), high_lport(-1),
+              low_rport(-1), high_rport(-1) {}
     };
     Parse() {
         found_ci_ = false;
