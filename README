@@ -211,7 +211,9 @@ eight character BLAKE-derived hash constructed from the username that owns the
 connection, the ip of the machine making the query, and the port number to
 which we are connected.  This rule would perhaps be useful for connecting to
 irc servers that demand an ident response, as the hash will be the same on
-subsequent connections to the same port on the same server.
+subsequent connections to the same port on the same server.  Note that because
+the IPV4 space is a strict subset of the IPV6 address space
+(A.B.C.D -> ::ffff:AB:CD), this rule will match both IPV4 and IPV6 connections.
 
 The second rule is rather more simple than the first.  It will only match
 queries from the local machine (::1) asking who owns connections to port 113 on
