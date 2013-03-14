@@ -247,19 +247,9 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                          ba::ip::address da, unsigned short dp)
 {
     int uid = -1;
-    if (sa.is_v6() != da.is_v6()) {
-    }
-
-    bool ipv4_sada;
-    if (sa.is_v4() && da.is_v4()) {
+    bool ipv4_sada = false;
+    if (sa.is_v4() && da.is_v4())
         ipv4_sada = true;
-    } else if (sa.is_v6() && da.is_v6()) {
-        ipv4_sada = false;
-    } else {
-        std::cerr << "saddr and daddr must both be IPv4 or both be IPv6"
-                  << std::endl;
-        return uid;
-    }
 
     if (!open(NETLINK_INET_DIAG)) {
         std::cerr << "failed to create netlink socket" << std::endl;
@@ -361,34 +351,20 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
             }
 
             ba::ip::address saddr, daddr;
-            ba::ip::address_v6 s6, d6;
             if (r->idiag_family == AF_INET) {
                 ba::ip::address_v4::bytes_type s4b, d4b;
                 memcpy(s4b.data(), r->id.idiag_src, 4);
                 memcpy(d4b.data(), r->id.idiag_dst, 4);
                 auto s4 = ba::ip::address_v4(s4b);
                 auto d4 = ba::ip::address_v4(d4b);
-                s6 = ba::ip::address_v6::v4_mapped(s4);
-                d6 = ba::ip::address_v6::v4_mapped(d4);
+                saddr = ba::ip::address(ba::ip::address_v6::v4_mapped(s4));
+                daddr = ba::ip::address(ba::ip::address_v6::v4_mapped(d4));
             } else {
                 ba::ip::address_v6::bytes_type s6b, d6b;
                 memcpy(s6b.data(), r->id.idiag_src, 16);
                 memcpy(d6b.data(), r->id.idiag_dst, 16);
-                s6 = ba::ip::address_v6(s6b);
-                d6 = ba::ip::address_v6(d6b);
-            }
-            if (sa.is_v4()) {
-                if (s6.is_v4_mapped())
-                    saddr = ba::ip::address(s6.to_v4());
-                else
-                    saddr = ba::ip::address(s6);
-                if (d6.is_v4_mapped())
-                    daddr = ba::ip::address(d6.to_v4());
-                else
-                    daddr = ba::ip::address(d6);
-            } else {
-                saddr = ba::ip::address(s6);
-                daddr = ba::ip::address(d6);
+                saddr = ba::ip::address(ba::ip::address_v6(s6b));
+                daddr = ba::ip::address(ba::ip::address_v6(d6b));
             }
             if (saddr != sa) {
                 std::cerr << "get_tcp_uid: v6 src addresses do not match: " << saddr << " != " << sa << std::endl;
