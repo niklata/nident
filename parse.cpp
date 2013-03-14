@@ -113,6 +113,10 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
             if (!m[2].matched) {
                 mask << std::dec << m[2];
                 mask >> ci.mask;
+                if (ci.host.is_v4() && ci.mask > 32)
+                    ci.mask = 32;
+                if (ci.mask > 128)
+                    ci.mask = 128;
             }
             llport << std::dec << m[3];
             llport >> ci.low_lport;
