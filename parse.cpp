@@ -105,27 +105,27 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
 
             try {
                 ci.host = ba::ip::address::from_string(hoststr);
-                ci.type = ci.host.is_v4() ? HostIP4 : HostIP6;
-            } catch (boost::system::error_code &ec) {
-                if (boost::regex_match(hoststr.c_str(), n, rehost)) {
-                    ci.type = HostName;
-                    // XXX support hostnames in config file
-                    std::cerr << "support for hostnames NYI\n";
-                    continue;
-                }
+            } catch (const boost::system::error_code &ec) {
+                std::cerr << "bad host string: '" << hoststr << "'\n";
                 continue; // invalid
             }
 
-            mask << std::dec << m[2];
-            mask >> ci.mask;
+            if (!m[2].matched) {
+                mask << std::dec << m[2];
+                mask >> ci.mask;
+            }
             llport << std::dec << m[3];
             llport >> ci.low_lport;
-            hlport << std::dec << m[4];
-            hlport >> ci.high_lport;
+            if (!m[4].matched) {
+                hlport << std::dec << m[4];
+                hlport >> ci.high_lport;
+            }
             lrport << std::dec << m[5];
             lrport >> ci.low_rport;
-            hrport << std::dec << m[6];
-            hrport >> ci.high_rport;
+            if (!m[6].matched) {
+                hrport << std::dec << m[6];
+                hrport >> ci.high_rport;
+            }
             if (boost::regex_match(polstr.c_str(), o, re_deny)) {
                 ci.policy.action = PolicyDeny;
             } else if (boost::regex_match(polstr.c_str(), o, re_accept)) {

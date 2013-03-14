@@ -35,12 +35,6 @@
 
 class Parse {
 public:
-    enum HostType {
-        HostNone,
-        HostName,
-        HostIP4,
-        HostIP6
-    };
     enum PolicyAction {
         PolicyDeny,
         PolicyAccept,
@@ -70,7 +64,6 @@ public:
         int hashitems;
     };
     struct ConfigItem {
-        HostType type;
         boost::asio::ip::address host;
         int mask;
         int low_lport;
@@ -79,7 +72,7 @@ public:
         int high_rport;
         Policy policy;
         ConfigItem()
-            : type(HostNone), mask(-1), low_lport(-1), high_lport(-1),
+            :  mask(-1), low_lport(-1), high_lport(-1),
               low_rport(-1), high_rport(-1) {}
     };
     Parse() {
