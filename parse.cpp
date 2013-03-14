@@ -1,7 +1,6 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2011-03-28 21:03:50 nk>
  *
- * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2010-2013 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
