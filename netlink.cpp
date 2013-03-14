@@ -276,7 +276,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     req.nlh.nlmsg_pid = portid_;
     req.nlh.nlmsg_seq = this_seq;
     memset(&req.r, 0, sizeof req.r);
-    req.r.idiag_family = AF_INET;
+    req.r.idiag_family = (ipv4_sada ? AF_INET : AF_INET6);
     req.r.idiag_states = TCPF_ESTABLISHED;
     req.r.idiag_ext = (1 << (INET_DIAG_INFO-1));
 
