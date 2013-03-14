@@ -210,10 +210,7 @@ bool Parse::compare_ipv6(ba::ip::address_v6::bytes_type ip,
             mb |= 1 << i;
         }
     }
-    if (a == ma && b == mb)
-        return true;
-    else
-        return false;
+    return a == ma && b == mb;
 }
 
 std::string
