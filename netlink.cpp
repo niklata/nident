@@ -355,24 +355,26 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                 ba::ip::address_v4::bytes_type s4b, d4b;
                 memcpy(s4b.data(), r->id.idiag_src, 4);
                 memcpy(d4b.data(), r->id.idiag_dst, 4);
-                auto s4 = ba::ip::address_v4(s4b);
-                auto d4 = ba::ip::address_v4(d4b);
-                saddr = ba::ip::address(ba::ip::address_v6::v4_mapped(s4));
-                daddr = ba::ip::address(ba::ip::address_v6::v4_mapped(d4));
+                if (ba::ip::address_v4(s4b) != sa.to_v4()) {
+                    std::cerr << "get_tcp_uid: v4 src addresses do not match: " << saddr << " != " << sa << std::endl;
+                    continue;
+                }
+                if (ba::ip::address_v4(d4b) != da.to_v4()) {
+                    std::cerr << "get_tcp_uid: v4 dst addresses do not match: " << daddr << " != " << da << std::endl;
+                    continue;
+                }
             } else {
                 ba::ip::address_v6::bytes_type s6b, d6b;
                 memcpy(s6b.data(), r->id.idiag_src, 16);
                 memcpy(d6b.data(), r->id.idiag_dst, 16);
-                saddr = ba::ip::address(ba::ip::address_v6(s6b));
-                daddr = ba::ip::address(ba::ip::address_v6(d6b));
-            }
-            if (saddr != sa) {
-                std::cerr << "get_tcp_uid: v6 src addresses do not match: " << saddr << " != " << sa << std::endl;
-                continue;
-            }
-            if (daddr != da) {
-                std::cerr << "get_tcp_uid: v6 dst addresses do not match: " << daddr << " != " << da << std::endl;
-                continue;
+                if (ba::ip::address(ba::ip::address_v6(s6b)) != sa) {
+                    std::cerr << "get_tcp_uid: v6 src addresses do not match: " << saddr << " != " << sa << std::endl;
+                    continue;
+                }
+                if (ba::ip::address(ba::ip::address_v6(d6b)) != da) {
+                    std::cerr << "get_tcp_uid: v6 dst addresses do not match: " << daddr << " != " << da << std::endl;
+                    continue;
+                }
             }
 
             uid = r->idiag_uid;
