@@ -45,6 +45,17 @@ namespace ba = boost::asio;
 
 extern bool gParanoid;
 
+bool Parse::port_in_bounds(int port, int lo, int hi)
+{
+    if (hi < 0)
+        hi = lo;
+    if (lo >= 0) {
+        if (port < lo || port > hi)
+            return false;
+    }
+    return true;
+}
+
 // XXX: extend config format to mask by local address?
 bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
                       ba::ip::address ca, int cp)
@@ -148,13 +159,9 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
                     ci.policy.setHashCP();
             } else
                 continue; // invalid
-            if (ci.low_lport != -1 && sp < ci.low_lport)
+            if (!port_in_bounds(sp, ci.low_lport, ci.high_lport))
                 continue;
-            if (ci.high_lport != -1 && sp > ci.high_lport)
-                continue;
-            if (ci.low_rport != -1 && cp < ci.low_rport)
-                continue;
-            if (ci.high_rport != -1 && cp > ci.high_rport)
+            if (!port_in_bounds(cp, ci.low_rport, ci.high_rport))
                 continue;
             if (!compare_ip(ca, ci.host, ci.mask == -1 ? 0 : ci.mask))
                 continue;

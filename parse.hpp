@@ -84,6 +84,7 @@ public:
                    boost::asio::ip::address sa, int sp,
                    boost::asio::ip::address ca, int cp);
 private:
+    bool port_in_bounds(int port, int lo, int hi);
     bool compare_ip(boost::asio::ip::address ip,
                     boost::asio::ip::address mask, int msize);
     bool compare_ipv6(boost::asio::ip::address_v6::bytes_type ip,
