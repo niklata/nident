@@ -253,6 +253,7 @@ bool IdentClient::create_reply()
         return false;
 
     ParseState ps = parse_request();
+    int uid = -1;
     if (ps == ParseInvalid) {
         return false;
     } else if (ps == ParseBadPort) {
@@ -261,8 +262,8 @@ bool IdentClient::create_reply()
         log_line("Request parse incomplete: should never happen.");
         return false;
     } else {
-        int uid = nlink->get_tcp_uid(server_address_, server_port_,
-                                     client_address_, client_port_);
+        uid = nlink->get_tcp_uid(server_address_, server_port_,
+                                 client_address_, client_port_);
         if (uid == -1) {
             if (gParanoid)
                 reply = "ERROR:UNKNOWN-ERROR";
@@ -302,8 +303,8 @@ bool IdentClient::create_reply()
     ss >> outbuf_;
     outbuf_ += "\r\n";
     write();
-    log_line("(%s) %d,%d -> %s", client_address_.to_string().c_str(),
-             server_port_, client_port_, reply.c_str());
+    log_line("(%s) %d,%d uid=%d -> %s", client_address_.to_string().c_str(),
+             server_port_, client_port_, uid, reply.c_str());
     return true;
 }
 
