@@ -243,13 +243,75 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
     return false;
 }
 
+static bool effective_v4(ba::ip::address a)
+{
+    if (a.is_v4())
+        return true;
+    auto a6 = a.to_v6();
+    if (a6.is_v4_mapped() || a6.is_v4_compatible())
+        return true;
+    return false;
+}
+
+// v6 -> v4 is VALID IIF v6ismapped|v6iscompat
+static bool v4_addreq(const ba::ip::address &a, const ba::ip::address_v4 &v, bool src)
+{
+    if (a.is_v4()) {
+        if (a != v) {
+            std::cout << "v4_addreq: " << (src?"src":"dst") << " addresses do not match - a/v4 [" << a << "] != v/v4 [" << v << "]\n";
+            return false;
+        }
+        return true;
+    }
+
+    auto a6 = a.to_v6();
+    bool a6mapped(a6.is_v4_mapped()), a6compat(a6.is_v4_compatible());
+    if (a6mapped || a6compat) {
+        ba::ip::address_v4 a4;
+        try {
+            a4 = a6.to_v4();
+        } catch (const std::bad_cast &) { goto fail; }
+        if (a4 == v)
+            return true;
+        std::cout << "v4_addreq: " << (src?"src":"dst") << " addresses do not match - a/v6" << (a6mapped?"m":"c") << " [" << a << "] != v/v4 [" << v << "]\n";
+        return false;
+    }
+fail:
+    std::cout << "v4_addreq: " << (src?"src":"dst") << " addresses do not match - a/v6 [" << a << "] != v/v4 [" << v << "]\n";
+    return false;
+}
+
+static bool v6_addreq(const ba::ip::address &a, const ba::ip::address_v6 &v, bool src)
+{
+    if (a.is_v6()) {
+        if (a != v) {
+            std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v6 [" << a << "] != v/v6 [" << v << "]\n";
+            return false;
+        }
+        return true;
+    }
+
+    bool vmapped(v.is_v4_mapped()), vcompat(v.is_v4_compatible());
+    if (vmapped || vcompat) {
+        ba::ip::address_v4 v4;
+        try {
+            v4 = v.to_v4();
+        } catch (const std::bad_cast &) { goto fail; }
+        if (a == v4)
+            return true;
+        std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v4 [" << a << "] != v/v6" << (vmapped?"m":"c") << " [" << v << "]\n";
+        return false;
+    }
+fail:
+    std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v4 [" << a << "] != v/v6 [" << v << "]\n";
+    return false;
+}
+
 int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                          ba::ip::address da, unsigned short dp)
 {
     int uid = -1;
-    bool ipv4_sada = false;
-    if (sa.is_v4() && da.is_v4())
-        ipv4_sada = true;
+    bool ipv4_sada = effective_v4(sa);
 
     if (!open(NETLINK_INET_DIAG)) {
         std::cerr << "failed to create netlink socket" << std::endl;
@@ -350,31 +412,26 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                 continue;
             }
 
-            ba::ip::address saddr, daddr;
             if (r->idiag_family == AF_INET) {
                 ba::ip::address_v4::bytes_type s4b, d4b;
                 memcpy(s4b.data(), r->id.idiag_src, 4);
                 memcpy(d4b.data(), r->id.idiag_dst, 4);
-                if (ba::ip::address_v4(s4b) != sa.to_v4()) {
-                    std::cerr << "get_tcp_uid: v4 src addresses do not match: " << saddr << " != " << sa << std::endl;
+                auto rs = ba::ip::address_v4(s4b);
+                auto rd = ba::ip::address_v4(d4b);
+                if (!v4_addreq(sa, rs, true))
                     continue;
-                }
-                if (ba::ip::address_v4(d4b) != da.to_v4()) {
-                    std::cerr << "get_tcp_uid: v4 dst addresses do not match: " << daddr << " != " << da << std::endl;
+                if (!v4_addreq(da, rd, false))
                     continue;
-                }
             } else {
                 ba::ip::address_v6::bytes_type s6b, d6b;
                 memcpy(s6b.data(), r->id.idiag_src, 16);
                 memcpy(d6b.data(), r->id.idiag_dst, 16);
-                if (ba::ip::address(ba::ip::address_v6(s6b)) != sa) {
-                    std::cerr << "get_tcp_uid: v6 src addresses do not match: " << saddr << " != " << sa << std::endl;
+                auto rs = ba::ip::address_v6(s6b);
+                auto rd = ba::ip::address_v6(d6b);
+                if (!v6_addreq(sa, rs, true))
                     continue;
-                }
-                if (ba::ip::address(ba::ip::address_v6(d6b)) != da) {
-                    std::cerr << "get_tcp_uid: v6 dst addresses do not match: " << daddr << " != " << da << std::endl;
+                if (!v6_addreq(da, rd, false))
                     continue;
-                }
             }
 
             uid = r->idiag_uid;
