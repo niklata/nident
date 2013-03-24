@@ -51,7 +51,7 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
-    boost::regex re, rehost;
+    boost::regex re;
     boost::regex re_accept, re_deny, re_spoof, re_hash;
     boost::cmatch m;
 
@@ -75,7 +75,7 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
     // re4.assign("^((?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9]))");
     // re6.assign("^(((?=(?>.*?::)(?!.*::)))(::)?(([0-9A-F]{1,4})::?){0,5}|((?5):){6})(\\2((?5)(::?|$)){0,2}|((25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])(\\.|$)){4}|(?5):(?5))(?<![^:]:|\\.)\\z",
     //            boost::regex_constants::icase);
-    rehost.assign("(?:\\.?[A-Za-z0-9-]{1,63})+");
+    // rehost.assign("(?:\\.?[A-Za-z0-9-]{1,63})+");
     re_deny.assign("^deny\\s*", boost::regex_constants::icase);
     re_accept.assign("^accept\\s*", boost::regex_constants::icase);
     re_spoof.assign("^spoof\\s+([A-Za-z0-9]+)\\s*",
