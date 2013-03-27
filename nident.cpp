@@ -1,7 +1,6 @@
 /* nident.c - ident server
- * Time-stamp: <2012-07-16 12:57:07 nk>
  *
- * (c) 2004-2012 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2004-2013 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -159,6 +158,7 @@ static int enforce_seccomp(void)
 
 int main(int ac, char *av[]) {
     int uid = 0, gid = 0;
+    bool v4only = false;
     std::string pidfile, chroot_path;
     std::vector<std::unique_ptr<ClientListener>> listeners;
     std::vector<std::string> addrlist;
@@ -184,6 +184,7 @@ int main(int ac, char *av[]) {
          "user name that nident should run as")
         ("group,g", po::value<std::string>(),
          "group name that nident should run as")
+        ("v4-only,4", "host kernel doesn't support ipv6")
         ("help,h", "print help message")
         ("version,v", "print version information")
         ;
@@ -200,14 +201,14 @@ int main(int ac, char *av[]) {
 
     if (vm.count("help")) {
         std::cout << "nident " << NIDENT_VERSION << ", ident server.\n"
-                  << "Copyright (c) 2010-2012 Nicholas J. Kain\n"
+                  << "Copyright (c) 2010-2013 Nicholas J. Kain\n"
                   << av[0] << " [options] addresses...\n"
                   << desc << std::endl;
         return 1;
     }
     if (vm.count("version")) {
         std::cout << "nident " << NIDENT_VERSION << ", ident server.\n" <<
-            "Copyright (c) 2010-2012 Nicholas J. Kain\n"
+            "Copyright (c) 2010-2013 Nicholas J. Kain\n"
             "All rights reserved.\n\n"
             "Redistribution and use in source and binary forms, with or without\n"
             "modification, are permitted provided that the following conditions are met:\n\n"
@@ -237,6 +238,8 @@ int main(int ac, char *av[]) {
         gflags_detach = 0;
     if (vm.count("quiet"))
         gflags_quiet = 1;
+    if (vm.count("v4-only"))
+        v4only = true;
     if (vm.count("max-bytes")) {
         max_client_bytes = vm["max-bytes"].as<int>();
         if (max_client_bytes < 64)
@@ -316,7 +319,7 @@ int main(int ac, char *av[]) {
         }
     addrlist.clear();
 
-    nlink = std::unique_ptr<Netlink>(new Netlink);
+    nlink = std::unique_ptr<Netlink>(new Netlink(v4only));
     if (!nlink->open(NETLINK_INET_DIAG)) {
         std::cerr << "failed to create netlink socket" << std::endl;
         exit(EXIT_FAILURE);

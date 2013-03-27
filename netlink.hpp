@@ -38,7 +38,7 @@
 class Netlink
 {
 public:
-    Netlink();
+    explicit Netlink(bool v4only = false);
     ~Netlink();
     bool open(int socktype);
     int get_tcp_uid(boost::asio::ip::address sa, unsigned short sp,
@@ -47,9 +47,8 @@ public:
 private:
     bool nlmsg_ok(const struct nlmsghdr *nlh, size_t len) const;
     struct nlmsghdr *nlmsg_next(const struct nlmsghdr *nlh, int &len);
-    size_t bc_size(bool ipv4_sada) const;
-    size_t create_bc(char *bcbase, bool ipv4_sada, uint16_t sport,
-                     uint16_t dport) const;
+    size_t bc_size() const;
+    size_t create_bc(char *bcbase, uint16_t sport, uint16_t dport) const;
     enum {
         TCPF_ESTABLISHED = (1 << 1),
         TCPF_SYN_SENT    = (1 << 2),
@@ -71,8 +70,9 @@ private:
     private:
         int fd_;
     };
-    int socktype_;
+    bool v4only_;
     int fd_;
+    int socktype_;
     unsigned int portid_;
     unsigned int seq_;
 };

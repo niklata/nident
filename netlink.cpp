@@ -31,33 +31,26 @@
 #include "netlink.hpp"
 namespace ba = boost::asio;
 
-Netlink::Netlink() {
-    fd_ = -1;
-    socktype_ = -1;
-}
+Netlink::Netlink(bool v4only) : v4only_(v4only), fd_(-1), socktype_(-1) {}
+Netlink::~Netlink() { close(fd_); }
 
-Netlink::~Netlink() {
-    close(fd_);
-}
-
-size_t Netlink::bc_size(bool ipv4_sada) const
+size_t Netlink::bc_size() const
 {
-    const size_t addrsiz = ipv4_sada ? 4 : 16; // bytes
+    const size_t addrsiz = v4only_ ? 4 : 16; // bytes
     return 2 * (sizeof(struct inet_diag_bc_op)
                 + sizeof(struct inet_diag_hostcond) + addrsiz);
 }
 
 // Returns the length of the message stored in bcbase or 0 on failure.
-size_t Netlink::create_bc(char *bcbase, bool ipv4_sada, uint16_t sport,
-                          uint16_t dport) const
+size_t Netlink::create_bc(char *bcbase, uint16_t sport, uint16_t dport) const
 {
-    const size_t blenp = bc_size(ipv4_sada);
-    const size_t addrsiz = ipv4_sada ? 4 : 16; // bytes
+    const size_t blenp = bc_size();
+    const size_t addrsiz = v4only_ ? 4 : 16; // bytes
     const size_t opsize = sizeof(struct inet_diag_bc_op);
     const size_t condsize = sizeof(struct inet_diag_hostcond) + addrsiz;
     const size_t oplen0 = opsize + condsize;
     const size_t oplen1 = opsize + condsize;
-    const uint8_t afam = (ipv4_sada ? AF_INET : AF_INET6);
+    const uint8_t afam = (v4only_ ? AF_INET : AF_INET6);
 
     struct inet_diag_bc_op *op0 = (struct inet_diag_bc_op *)bcbase;
     op0->code = INET_DIAG_BC_S_COND;
@@ -243,6 +236,7 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
     return false;
 }
 
+#if 0
 static bool effective_v4(ba::ip::address a)
 {
     if (a.is_v4())
@@ -252,6 +246,7 @@ static bool effective_v4(ba::ip::address a)
         return true;
     return false;
 }
+#endif
 
 // v6 -> v4 is VALID IIF v6ismapped|v6iscompat
 static bool v4_addreq(const ba::ip::address &a, const ba::ip::address_v4 &v, bool src)
@@ -333,7 +328,6 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                          ba::ip::address da, unsigned short dp)
 {
     int uid = -1;
-    bool ipv4_sada = effective_v4(sa) && effective_v4(da);
 
     if (!open(NETLINK_INET_DIAG)) {
         std::cerr << "failed to create netlink socket" << std::endl;
@@ -360,16 +354,16 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     req.nlh.nlmsg_pid = portid_;
     req.nlh.nlmsg_seq = this_seq;
     memset(&req.r, 0, sizeof req.r);
-    req.r.idiag_family = (ipv4_sada ? AF_INET : AF_INET6);
+    req.r.idiag_family = (v4only_ ? AF_INET : AF_INET6);
     req.r.idiag_states = TCPF_ESTABLISHED;
     req.r.idiag_ext = (1 << (INET_DIAG_INFO-1));
 
     iov[0].iov_base = &req;
     iov[0].iov_len = sizeof req;
-    size_t bclen = bc_size(ipv4_sada);
+    size_t bclen = bc_size();
     char bcbuf[bclen];
     memset(bcbuf, 0, sizeof bcbuf);
-    create_bc(bcbuf, ipv4_sada, sp, dp);
+    create_bc(bcbuf, sp, dp);
     rta.rta_type = INET_DIAG_REQ_BYTECODE;
     rta.rta_len = RTA_LENGTH(bclen);
     iov[1].iov_base = &rta;
