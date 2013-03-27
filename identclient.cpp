@@ -303,7 +303,8 @@ bool IdentClient::create_reply()
     ss >> outbuf_;
     outbuf_ += "\r\n";
     write();
-    log_line("(%s) %d,%d uid=%d -> %s", client_address_.to_string().c_str(),
+    log_line("(%s,%s) %d,%d uid=%d -> %s", server_address_.to_string().c_str(),
+             client_address_.to_string().c_str(),
              server_port_, client_port_, uid, reply.c_str());
     return true;
 }
