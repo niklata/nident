@@ -284,13 +284,35 @@ fail:
 static bool v6_addreq(const ba::ip::address &a, const ba::ip::address_v6 &v, bool src)
 {
     if (a.is_v6()) {
+        auto a6 = a.to_v6();
+        bool amapped(a6.is_v4_mapped()), acompat(a6.is_v4_compatible());
+        if (amapped || acompat) {
+            ba::ip::address_v4 a4;
+            try {
+                a4 = a6.to_v4();
+            } catch (const std::bad_cast &) { goto normal_test; }
+            bool vmapped(v.is_v4_mapped()), vcompat(v.is_v4_compatible());
+            if (vmapped || vcompat) {
+                ba::ip::address_v4 v4;
+                try {
+                    v4 = v.to_v4();
+                } catch (const std::bad_cast &) { goto fail2; }
+                if (a4 == v4)
+                    return true;
+                std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v4" << (amapped?"m":"c") << " [" << a << "] != v/v4" << (vmapped?"m":"c") << " [" << v << "]\n";
+                return false;
+            }
+fail2:
+            std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v4" << (amapped?"m":"c") << " [" << a << "] != v/v4 [" << v << "]\n";
+            return false;
+        }
+normal_test:
         if (a != v) {
             std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v6 [" << a << "] != v/v6 [" << v << "]\n";
             return false;
         }
         return true;
     }
-
     bool vmapped(v.is_v4_mapped()), vcompat(v.is_v4_compatible());
     if (vmapped || vcompat) {
         ba::ip::address_v4 v4;
