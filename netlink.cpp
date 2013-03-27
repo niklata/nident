@@ -428,17 +428,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                 continue;
             }
 
-            if (r->idiag_family == AF_INET) {
-                ba::ip::address_v4::bytes_type s4b, d4b;
-                memcpy(s4b.data(), r->id.idiag_src, 4);
-                memcpy(d4b.data(), r->id.idiag_dst, 4);
-                auto rs = ba::ip::address_v4(s4b);
-                auto rd = ba::ip::address_v4(d4b);
-                if (!v4_addreq(sa, rs, true))
-                    continue;
-                if (!v4_addreq(da, rd, false))
-                    continue;
-            } else {
+            if (r->idiag_family == AF_INET6) {
                 ba::ip::address_v6::bytes_type s6b, d6b;
                 memcpy(s6b.data(), r->id.idiag_src, 16);
                 memcpy(d6b.data(), r->id.idiag_dst, 16);
@@ -447,6 +437,16 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                 if (!v6_addreq(sa, rs, true))
                     continue;
                 if (!v6_addreq(da, rd, false))
+                    continue;
+            } else {
+                ba::ip::address_v4::bytes_type s4b, d4b;
+                memcpy(s4b.data(), r->id.idiag_src, 4);
+                memcpy(d4b.data(), r->id.idiag_dst, 4);
+                auto rs = ba::ip::address_v4(s4b);
+                auto rd = ba::ip::address_v4(d4b);
+                if (!v4_addreq(sa, rs, true))
+                    continue;
+                if (!v4_addreq(da, rd, false))
                     continue;
             }
 
