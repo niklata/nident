@@ -311,7 +311,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                          ba::ip::address da, unsigned short dp)
 {
     int uid = -1;
-    bool ipv4_sada = effective_v4(sa);
+    bool ipv4_sada = effective_v4(sa) && effective_v4(da);
 
     if (!open(NETLINK_INET_DIAG)) {
         std::cerr << "failed to create netlink socket" << std::endl;
