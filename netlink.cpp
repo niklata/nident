@@ -236,20 +236,8 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
     return false;
 }
 
-#if 0
-static bool effective_v4(ba::ip::address a)
-{
-    if (a.is_v4())
-        return true;
-    auto a6 = a.to_v6();
-    if (a6.is_v4_mapped() || a6.is_v4_compatible())
-        return true;
-    return false;
-}
-#endif
-
 // v6 -> v4 is VALID IIF v6ismapped|v6iscompat
-static bool v4_addreq(const ba::ip::address &a, const ba::ip::address_v4 &v, bool src)
+static bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address_v4 &v, bool src)
 {
     if (a.is_v4()) {
         if (a != v) {
@@ -276,7 +264,7 @@ fail:
     return false;
 }
 
-static bool v6_addreq(const ba::ip::address &a, const ba::ip::address_v6 &v, bool src)
+static bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address_v6 &v, bool src)
 {
     if (a.is_v6()) {
         auto a6 = a.to_v6();
@@ -322,6 +310,13 @@ normal_test:
 fail:
     std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v4 [" << a << "] != v/v6 [" << v << "]\n";
     return false;
+}
+
+static inline bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address
+                              &v, bool src)
+{
+    return v.is_v6() ? ip_addr_eq(a, v.to_v6(), src)
+                     : ip_addr_eq(a, v.to_v4(), src);
 }
 
 int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
@@ -434,9 +429,9 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                 memcpy(d6b.data(), r->id.idiag_dst, 16);
                 auto rs = ba::ip::address_v6(s6b);
                 auto rd = ba::ip::address_v6(d6b);
-                if (!v6_addreq(sa, rs, true))
+                if (!ip_addr_eq(sa, rs, true))
                     continue;
-                if (!v6_addreq(da, rd, false))
+                if (!ip_addr_eq(da, rd, false))
                     continue;
             } else {
                 ba::ip::address_v4::bytes_type s4b, d4b;
@@ -444,9 +439,9 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
                 memcpy(d4b.data(), r->id.idiag_dst, 4);
                 auto rs = ba::ip::address_v4(s4b);
                 auto rd = ba::ip::address_v4(d4b);
-                if (!v4_addreq(sa, rs, true))
+                if (!ip_addr_eq(sa, rs, true))
                     continue;
-                if (!v4_addreq(da, rd, false))
+                if (!ip_addr_eq(da, rd, false))
                     continue;
             }
 
