@@ -7,6 +7,7 @@ namespace ba = boost::asio;
 #include "netlink.hpp"
 
 bool gParanoid = false;
+std::string gParseHashSalt;
 int main(int argc, const char *argv[])
 {
     std::string sastr, dastr;
@@ -23,6 +24,8 @@ int main(int argc, const char *argv[])
          "destination address that will be checked in printable format")
         ("dp", po::value<unsigned short>(),
          "destination port that will be checked")
+        ("salt,s", po::value<std::string>(),
+         "string that should be used as salt for hash replies")
         ;
     po::positional_options_description p;
     p.add("sa", 1).add("sp", 1).add("da", 1).add("dp", 1);
@@ -43,6 +46,8 @@ int main(int argc, const char *argv[])
         dastr = vm["da"].as<std::string>();
     if (vm.count("dp"))
         dp = vm["dp"].as<unsigned short>();
+    if (vm.count("salt"))
+        gParseHashSalt = vm["salt"].as<std::string>();
 
     if (!sastr.size()) {
         std::cerr << "no source address specified\n";

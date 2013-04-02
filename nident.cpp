@@ -76,6 +76,7 @@ boost::asio::io_service io_service;
 std::unique_ptr<Netlink> nlink;
 bool gParanoid = false;
 bool gChrooted = false;
+std::string gParseHashSalt;
 
 static void sighandler(int sig)
 {
@@ -184,6 +185,8 @@ int main(int ac, char *av[]) {
          "user name that nident should run as")
         ("group,g", po::value<std::string>(),
          "group name that nident should run as")
+        ("salt,s", po::value<std::string>(),
+         "string that should be used as salt for hash replies")
         ("v4-only,4", "host kernel doesn't support ipv6")
         ("help,h", "print help message")
         ("version,v", "print version information")
@@ -277,6 +280,8 @@ int main(int ac, char *av[]) {
             } else suicide("invalid gid specified");
         }
     }
+    if (vm.count("salt"))
+        gParseHashSalt = vm["salt"].as<std::string>();
 
     if (gflags_detach)
         if (daemon(0,0))

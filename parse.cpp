@@ -44,6 +44,7 @@ extern "C" {
 namespace ba = boost::asio;
 
 extern bool gParanoid;
+extern std::string gParseHashSalt;
 
 bool Parse::port_in_bounds(int port, int lo, int hi)
 {
@@ -251,6 +252,7 @@ Parse::get_response(ba::ip::address sa, int sp, ba::ip::address ca, int cp,
     } else if (ci_.policy.action == PolicyHash) {
         std::stringstream sh;
         std::string hashstr;
+        sh << gParseHashSalt;
         if (ci_.policy.isHashUID())
             sh << uid;
         if (ci_.policy.isHashIP())
