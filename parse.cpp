@@ -120,7 +120,7 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
                 continue; // invalid
             }
 
-            if (!m[2].matched) {
+            if (m[2].matched) {
                 mask << std::dec << m[2];
                 mask >> ci.mask;
                 if (ci.host.is_v4() && ci.mask > 32)
@@ -130,13 +130,13 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
             }
             llport << std::dec << m[3];
             llport >> ci.low_lport;
-            if (!m[4].matched) {
+            if (m[4].matched) {
                 hlport << std::dec << m[4];
                 hlport >> ci.high_lport;
             }
             lrport << std::dec << m[5];
             lrport >> ci.low_rport;
-            if (!m[6].matched) {
+            if (m[6].matched) {
                 hrport << std::dec << m[6];
                 hrport >> ci.high_rport;
             }
