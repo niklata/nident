@@ -50,14 +50,12 @@ size_t Netlink::create_bc(char *bcbase, uint16_t sport, uint16_t dport) const
     const size_t condsize = sizeof(struct inet_diag_hostcond) + addrsiz;
     const size_t oplen0 = opsize + condsize;
     const size_t oplen1 = opsize + condsize;
-    const uint8_t afam = (v4only_ ? AF_INET : AF_INET6);
 
     struct inet_diag_bc_op *op0 = (struct inet_diag_bc_op *)bcbase;
     op0->code = INET_DIAG_BC_S_COND;
     op0->yes = oplen0;
     op0->no = blenp + 4;
     struct inet_diag_hostcond *cond0 = (struct inet_diag_hostcond*)((char *)op0 + opsize);
-    cond0->family = afam;
     cond0->port = sport;
     cond0->prefix_len = 0;
 
@@ -66,7 +64,6 @@ size_t Netlink::create_bc(char *bcbase, uint16_t sport, uint16_t dport) const
     op1->yes = oplen1;
     op1->no = oplen1 + 4;
     struct inet_diag_hostcond *cond1 = (struct inet_diag_hostcond*)((char *)op1 + opsize);
-    cond1->family = afam;
     cond1->port = dport;
     cond1->prefix_len = 0;
 
