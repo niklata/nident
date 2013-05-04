@@ -32,7 +32,8 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <boost/regex.hpp>
+#include <boost/xpressive/xpressive_static.hpp>
+#include <boost/algorithm/string.hpp>
 #include <stdint.h>
 #include <pwd.h>
 
@@ -63,14 +64,6 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
 {
     std::string l;
     std::ifstream f(fn, std::ifstream::in);
-    boost::regex re;
-    boost::regex re_accept, re_deny, re_spoof, re_hash;
-    boost::cmatch m;
-
-    if (f.fail() || f.bad() || f.eof()) {
-        std::cerr << "failed to open file: '" << fn << "'";
-        goto out;
-    }
 
     // x.x.x.x[/n] (*|l[:h]) (*|l[:h]) -> POLICY
     // x:x:x:x:x:x:x:x[/n] (*|l[:h]) (*|l[:h]) -> POLICY
@@ -79,21 +72,32 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
     // deny||accept
     // spoof string
     // hash [uid] [ip] [sp] [cp]
-    re.assign("\\s*([a-zA-Z0-9:.-]+)"//"\\s*([0-9A-Fa-f:.]+)" // ipv[46]
-              "(?:/(\\d{1,2}))?"
-              "\\s+(?:\\*|(\\d{1,5})(?::(\\d{1,5}))?)"
-              "\\s+(?:\\*|(\\d{1,5})(?::(\\d{1,5}))?)"
-              "\\s*->\\s*([a-zA-Z0-9 \\t]+)");
-    // re4.assign("^((?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\\.(?:25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9]))");
-    // re6.assign("^(((?=(?>.*?::)(?!.*::)))(::)?(([0-9A-F]{1,4})::?){0,5}|((?5):){6})(\\2((?5)(::?|$)){0,2}|((25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])(\\.|$)){4}|(?5):(?5))(?<![^:]:|\\.)\\z",
-    //            boost::regex_constants::icase);
-    // rehost.assign("(?:\\.?[A-Za-z0-9-]{1,63})+");
-    re_deny.assign("^deny\\s*", boost::regex_constants::icase);
-    re_accept.assign("^accept\\s*", boost::regex_constants::icase);
-    re_spoof.assign("^spoof\\s+([A-Za-z0-9]+)\\s*",
-                    boost::regex_constants::icase);
-    re_hash.assign("^hash(\\s+(?:uid|ip|sp|cp))+\\s*",
-                   boost::regex_constants::icase);
+
+    using namespace boost::xpressive;
+    mark_tag m_ip(1), m_mask(2), m_lolp(3), m_hilp(4), m_lorp(5), m_hirp(6),
+             m_pol(7);
+    mark_tag m_spoof(1);
+    mark_tag m_hash(1);
+    cregex re = (*blank >> (m_ip = +set[alnum|':'|'.'|'-'])
+                 >> !('/' >> (m_mask = repeat<1,2>(_d)))
+                 >> +blank >> ('*'|((m_lolp = repeat<1,5>(_d))
+                                    >> !(':' >> (m_hilp = repeat<1,5>(_d)))))
+                 >> +blank >> ('*'|((m_lorp = repeat<1,5>(_d))
+                                    >> !(':' >> (m_hirp = repeat<1,5>(_d)))))
+                 >> *blank >> "->" >> *blank >> (m_pol = +set[alnum|blank])
+                 );
+    cregex re_deny = (bos >> icase("deny") >> *blank);
+    cregex re_accept = (bos >> icase("accept") >> *blank);
+    cregex re_spoof = (bos >> icase("spoof") >> +blank
+                       >> (m_spoof = +alnum) >> *blank);
+    cregex re_hash = (bos >> icase("hash") >> (m_hash = +(+blank >> +alnum))
+                      >> *blank);
+    cmatch what;
+
+    if (f.fail() || f.bad() || f.eof()) {
+        std::cerr << "failed to open file: '" << fn << "'";
+        goto out;
+    }
 
     while (1) {
         std::getline(f, l);
@@ -107,10 +111,9 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
             break;
         }
 
-        if (boost::regex_match(l.c_str(), m, re)) {
-            const std::string hoststr = m[1];
-            const std::string polstr = m[7];
-            boost::cmatch n, o;
+        if (regex_search(l.c_str(), what, re)) {
+            const std::string hoststr = what[m_ip];
+            const std::string polstr = boost::to_lower_copy(what[m_pol].str());
             ConfigItem ci;
             std::stringstream mask, llport, hlport, lrport, hrport;
 
@@ -121,43 +124,49 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
                 continue; // invalid
             }
 
-            if (m[2].matched) {
-                mask << std::dec << m[2];
+            if (what[m_mask]) {
+                mask << std::dec << what[m_mask].str();
                 mask >> ci.mask;
                 if (ci.host.is_v4() && ci.mask > 32)
                     ci.mask = 32;
                 if (ci.mask > 128)
                     ci.mask = 128;
             }
-            llport << std::dec << m[3];
+            llport << std::dec << what[m_lolp].str();
             llport >> ci.low_lport;
-            if (m[4].matched) {
-                hlport << std::dec << m[4];
+            if (what[m_hilp]) {
+                hlport << std::dec << what[m_hilp].str();
                 hlport >> ci.high_lport;
             }
-            lrport << std::dec << m[5];
+            lrport << std::dec << what[m_lorp].str();
             lrport >> ci.low_rport;
-            if (m[6].matched) {
-                hrport << std::dec << m[6];
+            if (what[m_hirp]) {
+                hrport << std::dec << what[m_hirp].str();
                 hrport >> ci.high_rport;
             }
-            if (boost::regex_match(polstr.c_str(), o, re_deny)) {
+
+            if (regex_match(polstr.c_str(), what, re_deny)) {
                 ci.policy.action = PolicyDeny;
-            } else if (boost::regex_match(polstr.c_str(), o, re_accept)) {
+            } else if (regex_match(polstr.c_str(), what, re_accept)) {
                 ci.policy.action = PolicyAccept;
-            } else if (boost::regex_match(polstr.c_str(), o, re_spoof)) {
+            } else if (regex_match(polstr.c_str(), what, re_spoof)) {
                 ci.policy.action = PolicySpoof;
-                ci.policy.spoof = o[1];
-            } else if (boost::regex_match(polstr.c_str(), o, re_hash)) {
+                ci.policy.spoof = what[m_spoof];
+            } else if (regex_match(polstr.c_str(), what, re_hash)) {
                 ci.policy.action = PolicyHash;
-                if (boost::regex_match(polstr.c_str(), o, boost::regex(".*?uid.*?")))
-                    ci.policy.setHashUID();
-                if (boost::regex_match(polstr.c_str(), o, boost::regex(".*?ip.*?")))
-                    ci.policy.setHashIP();
-                if (boost::regex_match(polstr.c_str(), o, boost::regex(".*?sp.*?")))
-                    ci.policy.setHashSP();
-                if (boost::regex_match(polstr.c_str(), o, boost::regex(".*?cp.*?")))
-                    ci.policy.setHashCP();
+                sregex reh = +blank;
+                sregex_token_iterator
+                    begin(polstr.begin(), polstr.end(), reh, -1), end;
+                for (auto i = begin; i != end; ++i) {
+                    if (*i == "uid")
+                        ci.policy.setHashUID();
+                    if (*i == "ip")
+                        ci.policy.setHashIP();
+                    if (*i == "sp")
+                        ci.policy.setHashSP();
+                    if (*i == "cp")
+                        ci.policy.setHashCP();
+                }
             } else
                 continue; // invalid
             if (!port_in_bounds(sp, ci.low_lport, ci.high_lport))
