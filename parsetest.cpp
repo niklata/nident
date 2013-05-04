@@ -69,8 +69,19 @@ int main(int argc, const char *argv[])
     std::cout << "src: " << sastr << ":" << sp << " dst: " << dastr << ":" << dp
               << std::endl;
 
-    ba::ip::address sa = ba::ip::address::from_string(sastr);
-    ba::ip::address da = ba::ip::address::from_string(dastr);
+    ba::ip::address sa, da;
+    try {
+        sa = ba::ip::address::from_string(sastr);
+    } catch (const std::exception&) {
+        std::cerr << "invalid source ip address\n";
+        return -1;
+    }
+    try {
+        da = ba::ip::address::from_string(dastr);
+    } catch (const std::exception&) {
+        std::cerr << "invalid destination ip address\n";
+        return -1;
+    }
 
     Netlink nl;
     int uid = nl.get_tcp_uid(sa, sp, da, dp);
