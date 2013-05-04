@@ -178,9 +178,15 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
 
 bool Parse::compare_ip(ba::ip::address ip, ba::ip::address mask, int msize)
 {
-    if (mask.is_v4())
+    ba::ip::address_v6 ip6(ip.is_v4() ? ba::ip::address_v6::v4_mapped(ip.to_v4())
+                           : ip.to_v6()), mask6;
+    if (mask.is_v4()) {
+        mask6 = ba::ip::address_v6::v4_mapped(mask.to_v4());
         msize += 96;
-    return compare_ipv6(ip.to_v6().to_bytes(), mask.to_v6().to_bytes(), msize);
+    } else
+        mask6 = mask.to_v6();
+    msize = std::min(msize, 128);
+    return compare_ipv6(ip6.to_bytes(), mask6.to_bytes(), msize);
 }
 
 bool Parse::compare_ipv6(ba::ip::address_v6::bytes_type ip,
