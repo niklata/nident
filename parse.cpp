@@ -29,7 +29,6 @@
 #include "parse.hpp"
 
 #include <string.h>
-#include <iostream>
 #include <fstream>
 #include <sstream>
 #include <boost/xpressive/xpressive_static.hpp>
@@ -95,7 +94,7 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
     cmatch what;
 
     if (f.fail() || f.bad() || f.eof()) {
-        std::cerr << "failed to open file: '" << fn << "'";
+        log_line("Parse - failed to open file: '%s'", fn.c_str());
         goto out;
     }
 
@@ -104,10 +103,10 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
         if (f.eof()) {
             break;
         } else if (f.bad()) {
-            std::cerr << "fatal io error fetching line of " << fn << "\n";
+            log_line("Parse - fatal io error fetching line of '%s'", fn.c_str());
             break;
         } else if (f.fail()) {
-            std::cerr << "non-fatal io error fetching line of " << fn << "\n";
+            log_line("Parse - non-fatal io error fetching line of '%s'", fn.c_str());
             break;
         }
 
@@ -120,7 +119,7 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
             try {
                 ci.host = ba::ip::address::from_string(hoststr);
             } catch (const boost::system::error_code &ec) {
-                std::cerr << "bad host string: '" << hoststr << "'\n";
+                log_line("Parse - bad host string: '%s'", hoststr.c_str());
                 continue; // invalid
             }
 
