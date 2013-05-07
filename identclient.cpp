@@ -26,7 +26,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sstream>
 #include <iostream>
 
 #include <unistd.h>
@@ -173,10 +172,8 @@ IdentClient::ParseState IdentClient::parse_request()
                         found_ws_after_num = true;
                     continue;
                 case ',': {
-                    std::string sport = inbuf_.substr(prev_idx, i);
-                    std::stringstream ss;
-                    ss << sport;
-                    ss >> server_port_;
+                    server_port_ = boost::lexical_cast<int>
+                        (inbuf_.substr(prev_idx, i));
                     if (server_port_ < 1 || server_port_ > 65535)
                         return ParseBadPort;
                     state = ParseClientPort;
@@ -227,10 +224,7 @@ IdentClient::ParseState IdentClient::parse_request()
     }
   eol:
     if (state == ParseClientPort && found_num) {
-        std::string cport = inbuf_.substr(prev_idx, i);
-        std::stringstream ss;
-        ss << cport;
-        ss >> client_port_;
+        client_port_ = boost::lexical_cast<int>(inbuf_.substr(prev_idx, i));
         if (client_port_ < 1 || client_port_ > 65535)
             return ParseBadPort;
         return ParseDone;
@@ -298,9 +292,11 @@ bool IdentClient::create_reply()
         }
     }
 
-    std::stringstream ss;
-    ss << server_port_ << "," << client_port_ << ":" << reply;
-    ss >> outbuf_;
+    outbuf_ =  boost::lexical_cast<std::string>(server_port_);
+    outbuf_ += ",";
+    outbuf_ += boost::lexical_cast<std::string>(client_port_);
+    outbuf_ += ":";
+    outbuf_ += reply;
     outbuf_ += "\r\n";
     write();
     log_line("(%s,%s) %d,%d uid=%d -> %s", server_address_.to_string().c_str(),
