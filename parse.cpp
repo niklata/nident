@@ -175,8 +175,6 @@ Parse::get_response(ba::ip::address sa, int sp, ba::ip::address ca, int cp,
  */
 std::string Parse::compress_64_to_unix(uint64_t qword)
 {
-    std::stringstream ss;
-    std::string ret;
     union {
         unsigned char c[8];
         uint64_t i;
@@ -200,7 +198,6 @@ std::string Parse::compress_64_to_unix(uint64_t qword)
         }
         buf[i] = static_cast<char>(b.c[i]);
     }
-    ss << buf;
-    ss >> ret;
-    return ret;
+    return std::string(buf);
 }
+
