@@ -163,14 +163,16 @@ Parse::get_response(ba::ip::address sa, int sp, ba::ip::address ca, int cp,
     return ret;
 }
 
-// Please note that compressing the 64-bit value will greatly lessen its
-// entropy: the method I use will result in something with fewer than 48-bits
-// of entropy, with the 'slightly' owing to numbers 0-6 being 25% more likely
-// to occur than other alphanumerics and the alphanumeric mapping encoding
-// slightly less than 6 bits of each byte.  However, as ident's responses
-// should never be trusted, the security provided should be more than
-// sufficient.  This approach saves more entropy than merely converting 32-bits
-// of the qword to hex.
+/*  Technically ident allows username replies that consist of any valid octet
+ *  that is not one of [\0\r\n].  It is most important to pick an destination
+ *  alphabet size that divides the source alphabet size evenly so that the
+ *  occurence of each character in the destination alphabet is equally likely.
+ *
+ *  Thus, the best choice is to map onto 64 values.  I choose [A-Za-z0-9_.].
+ *  '.' is the least conservative choice from that set with regards to
+ *  compatibility with broken software, but I feel it is somewhat less likely
+ *  to break than '-'.
+ */
 std::string Parse::compress_64_to_unix(uint64_t qword)
 {
     std::stringstream ss;
@@ -183,12 +185,18 @@ std::string Parse::compress_64_to_unix(uint64_t qword)
     buf[8] = '\0';
     b.i = qword;
     for (int i = 0; i < 8; ++i) {
-        b.c[i] = b.c[i] % 62;
-        b.c[i] += 48;
-        if (b.c[i] > 57) {
-            b.c[i] += 7;
-            if (b.c[i] > 90)
-                b.c[i] += 6;
+        b.c[i] = b.c[i] % 64;
+        b.c[i] += 46; // incl '.'
+        if (b.c[i] > 46) {
+            b.c[i] += 1; // skip '/'
+            if (b.c[i] > 57) {
+                b.c[i] += 7;
+                if (b.c[i] > 90) {
+                    b.c[i] += 4; // incl '_'
+                    if (b.c[i] > 95)
+                        b.c[i] += 1; // skip '`'
+                }
+            }
         }
         buf[i] = static_cast<char>(b.c[i]);
     }
