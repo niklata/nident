@@ -153,6 +153,8 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
             continue; // invalid
         }
 
+        if (cs >= cfg_parser_first_final)
+            continue;
         if (!port_in_bounds(sp, ci.low_lport, ci.high_lport))
             continue;
         if (!port_in_bounds(cp, ci.low_rport, ci.high_rport))
