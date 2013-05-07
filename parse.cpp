@@ -29,8 +29,8 @@
 #include "parse.hpp"
 
 #include <string.h>
+#include <boost/lexical_cast.hpp>
 #include <fstream>
-#include <sstream>
 #include <stdint.h>
 #include <pwd.h>
 
@@ -106,60 +106,54 @@ bool Parse::compare_ipv6(ba::ip::address_v6::bytes_type ip,
     return a == ma && b == mb;
 }
 
-std::string
-Parse::get_response(ba::ip::address sa, int sp, ba::ip::address ca, int cp,
-                    int uid)
+std::string Parse::get_response(ba::ip::address sa, int sp,
+                                ba::ip::address ca, int cp, int uid)
 {
-    std::stringstream ss;
-    std::string ret;
+    std::string ret(32, '\0');
 
     if (!found_ci_ || ci_.policy.action == PolicyDeny) {
         if (gParanoid)
-            ss << "ERROR:UNKNOWN-ERROR";
+            ret = "ERROR:UNKNOWN-ERROR";
         else
-            ss << "ERROR:HIDDEN-USER";
+            ret = "ERROR:HIDDEN-USER";
     } else if (ci_.policy.action == PolicyAccept) {
-        ss << "USERID:UNIX:";
-        ss << uid;
+        ret = "USERID:UNIX:";
+        ret += boost::lexical_cast<std::string>(uid);
     } else if (ci_.policy.action == PolicySpoof) {
         if (!getpwnam(ci_.policy.spoof.c_str())) {
-            ss << "USERID:UNIX:";
-            ss << ci_.policy.spoof;
+            ret = "USERID:UNIX:";
+            ret += ci_.policy.spoof;
         } else {
             // A username exists with the spoof name.
             log_line("Spoof requested for extant user %s",
                      ci_.policy.spoof.c_str());
             if (gParanoid)
-                ss << "ERROR:UNKNOWN-ERROR";
+                ret = "ERROR:UNKNOWN-ERROR";
             else
-                ss << "ERROR:HIDDEN-USER";
+                ret = "ERROR:HIDDEN-USER";
         }
     } else if (ci_.policy.action == PolicyHash) {
-        std::stringstream sh;
-        std::string hashstr;
-        sh << gParseHashSalt;
+        std::string hs(gParseHashSalt);
         if (ci_.policy.isHashUID())
-            sh << uid;
+            hs += boost::lexical_cast<std::string>(uid);
         if (ci_.policy.isHashIP())
-            sh << ca;
+            hs += ca.to_string();
         if (ci_.policy.isHashSP())
-            sh << sp;
+            hs += boost::lexical_cast<std::string>(sp);
         if (ci_.policy.isHashCP())
-            sh << cp;
-        sh >> hashstr;
+            hs += boost::lexical_cast<std::string>(cp);
         union hash_result_t {
             uint64_t u64[4];
             uint8_t u8[32];
         } result;
-        blake256_hash(result.u8,
-                      reinterpret_cast<const uint8_t *>(hashstr.c_str()),
-                      hashstr.size());
+        blake256_hash(result.u8, reinterpret_cast<const uint8_t *>(hs.c_str()),
+                      hs.size());
         result.u64[0] ^= result.u64[1];
         result.u64[0] ^= result.u64[2];
         result.u64[0] ^= result.u64[3];
-        ss << "USERID:UNIX:" << compress_64_to_unix(result.u64[0]);
+        ret = "USERID:UNIX:";
+        ret += compress_64_to_unix(result.u64[0]);
     }
-    ss >> ret;
     return ret;
 }
 
