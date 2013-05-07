@@ -35,7 +35,7 @@ add_custom_command(
 
 
 set(NIDENT_SRCS
-  blake256.c
+  siphash.cpp
   netlink.cpp
   parse.cpp
   identclient.cpp
@@ -48,7 +48,7 @@ set(NLTEST_SRCS
   )
 
 set(PTEST_SRCS
-  blake256.c
+  siphash.cpp
   netlink.cpp
   parse.cpp
   parsetest.cpp

@@ -27,6 +27,7 @@
  */
 
 #include "parse.hpp"
+#include "siphash.hpp"
 
 #include <string.h>
 #include <boost/lexical_cast.hpp>
@@ -35,14 +36,13 @@
 #include <pwd.h>
 
 extern "C" {
-#include "blake256.h"
 #include "log.h"
 }
 
 namespace ba = boost::asio;
 
 extern bool gParanoid;
-extern std::string gParseHashSalt;
+extern uint64_t gSaltK0, gSaltK1;
 
 bool Parse::port_in_bounds(int port, int lo, int hi)
 {
@@ -133,7 +133,8 @@ std::string Parse::get_response(ba::ip::address sa, int sp,
                 ret = "ERROR:HIDDEN-USER";
         }
     } else if (ci_.policy.action == PolicyHash) {
-        std::string hs(gParseHashSalt);
+        std::string hs;
+        hs.reserve(32);
         if (ci_.policy.isHashUID())
             hs += boost::lexical_cast<std::string>(uid);
         if (ci_.policy.isHashIP())
@@ -142,17 +143,9 @@ std::string Parse::get_response(ba::ip::address sa, int sp,
             hs += boost::lexical_cast<std::string>(sp);
         if (ci_.policy.isHashCP())
             hs += boost::lexical_cast<std::string>(cp);
-        union hash_result_t {
-            uint64_t u64[4];
-            uint8_t u8[32];
-        } result;
-        blake256_hash(result.u8, reinterpret_cast<const uint8_t *>(hs.c_str()),
-                      hs.size());
-        result.u64[0] ^= result.u64[1];
-        result.u64[0] ^= result.u64[2];
-        result.u64[0] ^= result.u64[3];
         ret = "USERID:UNIX:";
-        ret += compress_64_to_unix(result.u64[0]);
+        ret += compress_64_to_unix(nk::siphash24_hash(gSaltK0, gSaltK1,
+                                                      hs.c_str(), hs.size()));
     }
     return ret;
 }

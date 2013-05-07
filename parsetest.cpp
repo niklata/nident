@@ -5,9 +5,12 @@ namespace po = boost::program_options;
 namespace ba = boost::asio;
 #include "parse.hpp"
 #include "netlink.hpp"
+#include "siphash.hpp"
 
 bool gParanoid = false;
-std::string gParseHashSalt;
+#define SALTC1 0x3133731337313373
+#define SALTC2 0xd3adb33fd3adb33f
+uint64_t gSaltK0 = SALTC1, gSaltK1 = SALTC2;
 int main(int argc, const char *argv[])
 {
     std::string sastr, dastr;
@@ -46,9 +49,12 @@ int main(int argc, const char *argv[])
         dastr = vm["da"].as<std::string>();
     if (vm.count("dp"))
         dp = vm["dp"].as<unsigned short>();
-    if (vm.count("salt"))
-        gParseHashSalt = vm["salt"].as<std::string>();
-
+    if (vm.count("salt")) {
+        auto sst = vm["salt"].as<std::string>();
+        gSaltK0 = nk::siphash24_hash(SALTC1, SALTC2, sst.c_str(), sst.size());
+        gSaltK1 = nk::siphash24_hash(gSaltK0, SALTC1 ^ SALTC2,
+                                     sst.c_str(), sst.size());
+    }
     if (!sastr.size()) {
         std::cerr << "no source address specified\n";
         exit(-1);

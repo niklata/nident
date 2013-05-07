@@ -56,6 +56,7 @@
 
 #include "identclient.hpp"
 #include "netlink.hpp"
+#include "siphash.hpp"
 
 extern "C" {
 #include "defines.h"
@@ -76,7 +77,9 @@ boost::asio::io_service io_service;
 std::unique_ptr<Netlink> nlink;
 bool gParanoid = false;
 bool gChrooted = false;
-std::string gParseHashSalt;
+#define SALTC1 0x3133731337313373
+#define SALTC2 0xd3adb33fd3adb33f
+uint64_t gSaltK0 = SALTC1, gSaltK1 = SALTC2;
 
 static void sighandler(int sig)
 {
@@ -280,8 +283,12 @@ int main(int ac, char *av[]) {
             } else suicide("invalid gid specified");
         }
     }
-    if (vm.count("salt"))
-        gParseHashSalt = vm["salt"].as<std::string>();
+    if (vm.count("salt")) {
+        auto sst = vm["salt"].as<std::string>();
+        gSaltK0 = nk::siphash24_hash(SALTC1, SALTC2, sst.c_str(), sst.size());
+        gSaltK1 = nk::siphash24_hash(gSaltK0, SALTC1 ^ SALTC2,
+                                     sst.c_str(), sst.size());
+    }
 
     if (gflags_detach)
         if (daemon(0,0))
