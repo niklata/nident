@@ -1,6 +1,6 @@
 /* identclient.cpp - ident client request handling
  *
- * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2010-2013 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -150,86 +150,6 @@ bool IdentClient::process_input()
             return false;
     }
     return true;
-}
-
-// Returns ParseInvalid if the object needs to be destroyed by the caller.
-IdentClient::ParseState IdentClient::parse_request()
-{
-    ParseState state = ParseServerPort;
-    int prev_idx = 0;
-    int sp_len = 0;
-    int cp_len = 0;
-    size_t i;
-    bool found_num = false;
-    bool found_ws_after_num = false;
-    for (i = 0; i < inbuf_.size(); ++i) {
-        const char c = inbuf_.at(i);
-        if (state == ParseServerPort) {
-            switch (c) {
-                case ' ':
-                case '\t':
-                    if (found_num)
-                        found_ws_after_num = true;
-                    continue;
-                case ',': {
-                    server_port_ = boost::lexical_cast<int>
-                        (inbuf_.substr(prev_idx, i));
-                    if (server_port_ < 1 || server_port_ > 65535)
-                        return ParseBadPort;
-                    state = ParseClientPort;
-                    prev_idx = i + 1;
-                    found_num = false;
-                    found_ws_after_num = false;
-                    continue;
-                }
-                case '0': case '1': case '2': case '3': case '4':
-                case '5': case '6': case '7': case '8': case '9':
-                    if (found_num == false) {
-                        found_num = true;
-                        prev_idx = i;
-                    }
-                    if (found_ws_after_num)
-                        return ParseInvalid;
-                    if (++sp_len > 5)
-                        return ParseBadPort;
-                    continue;
-                default:
-                    return ParseInvalid;
-            }
-        } else if (state == ParseClientPort) {
-            switch (c) {
-                case ' ':
-                case '\t':
-                    if (found_num)
-                        found_ws_after_num = true;
-                    continue;
-                case '\r':
-                case '\n':
-                    goto eol;
-                case '0': case '1': case '2': case '3': case '4':
-                case '5': case '6': case '7': case '8': case '9':
-                    if (found_num == false) {
-                        found_num = true;
-                        prev_idx = i;
-                    }
-                    if (found_ws_after_num)
-                        return ParseInvalid;
-                    if (++cp_len > 5)
-                        return ParseBadPort;
-                    continue;
-                default:
-                    return ParseInvalid;
-            }
-        }
-    }
-  eol:
-    if (state == ParseClientPort && found_num) {
-        client_port_ = boost::lexical_cast<int>(inbuf_.substr(prev_idx, i));
-        if (client_port_ < 1 || client_port_ > 65535)
-            return ParseBadPort;
-        return ParseDone;
-    }
-    return ParseInvalid;
 }
 
 // Forms a reply and schedules a write.

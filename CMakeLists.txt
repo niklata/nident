@@ -12,17 +12,27 @@ find_package( Boost COMPONENTS system program_options )
 link_directories ( ${Boost_LIBRARY_DIRS} )
 include_directories ( ${Boost_INCLUDE_DIRS} )
 
-set(RAGEL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/parsecfg.cpp)
+set(RAGEL_PARSECFG ${CMAKE_CURRENT_BINARY_DIR}/parsecfg.cpp)
+set(RAGEL_IDENTPARSE ${CMAKE_CURRENT_BINARY_DIR}/identparse.cpp)
 
 find_program(RAGEL ragel)
 add_custom_command(
-  OUTPUT ${RAGEL_OUTPUT}
-  COMMAND ${RAGEL} -G2 -o ${RAGEL_OUTPUT} parsecfg.rl
+  OUTPUT ${RAGEL_PARSECFG}
+  COMMAND ${RAGEL} -G2 -o ${RAGEL_PARSECFG} parsecfg.rl
   DEPENDS parsecfg.rl
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   COMMENT "Compiling Ragel state machine: parsecfg.rl"
   VERBATIM
   )
+add_custom_command(
+  OUTPUT ${RAGEL_IDENTPARSE}
+  COMMAND ${RAGEL} -G2 -o ${RAGEL_IDENTPARSE} identparse.rl
+  DEPENDS identparse.rl
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  COMMENT "Compiling Ragel state machine: identparse.rl"
+  VERBATIM
+  )
+
 
 set(NIDENT_SRCS
   blake256.c
@@ -44,11 +54,11 @@ set(PTEST_SRCS
   parsetest.cpp
   )
 
-add_executable(nident ${RAGEL_OUTPUT} ${NIDENT_SRCS})
+add_executable(nident ${RAGEL_IDENTPARSE} ${RAGEL_PARSECFG} ${NIDENT_SRCS})
 target_link_libraries(nident ${Boost_LIBRARIES} ncmlib)
 
 add_executable(nl-test ${NLTEST_SRCS})
 target_link_libraries(nl-test ${Boost_LIBRARIES})
 
-add_executable(parsetest ${RAGEL_OUTPUT} ${PTEST_SRCS})
+add_executable(parsetest ${RAGEL_PARSECFG} ${PTEST_SRCS})
 target_link_libraries(parsetest ${Boost_LIBRARIES} ncmlib)
