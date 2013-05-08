@@ -106,7 +106,7 @@ namespace ba = boost::asio;
             (maskip? > MaskSt % MaskEn )
             ws+ (portr > LocPortSt % LocPortEn)
             ws+ (portr > RemPortSt % RemPortEn)
-            ws* '->' ws* policy space+;
+            ws* '->' ws* policy space*;
 }%%
 
 %% write data;
@@ -144,6 +144,7 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
         unsigned int cs = 0;
         const char *p = l.c_str();
         const char *pe = p + l.size();
+        const char *eof = pe;
 
         try {
             %% write init;
@@ -153,7 +154,7 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
             continue; // invalid
         }
 
-        if (cs >= cfg_parser_first_final)
+        if (cs < cfg_parser_first_final)
             continue;
         if (!port_in_bounds(sp, ci.low_lport, ci.high_lport))
             continue;
