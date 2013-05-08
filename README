@@ -1,6 +1,6 @@
 LICENSE
 -------
- (c) 2010-2012 Nicholas J. Kain <njkain at gmail dot com>
+ (c) 2010-2013 Nicholas J. Kain <njkain at gmail dot com>
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -28,11 +28,12 @@ LICENSE
 REQUIREMENTS
 ------------
 
-Linux kernel (tested: 2.6.36 - 3.5)
-C99 C compiler (tested: gcc 4.5.0 - 4.7.1)
-C++03 C++ compiler (tested: gcc 4.5.0 - 4.7.1)
-CMake (tested: 2.8.1 - 2.8.8)
-Boost (tested: 1.42 - 1.50.0)
+Linux kernel (tested: 3.9)
+C99 C compiler (tested: gcc 4.7.1 - 4.8.0)
+C++11 compiler (tested: gcc 4.7.1 - 4.8.0)
+CMake (tested: 2.8.8)
+Boost (tested: 1.53.0)
+Ragel (tested: 6.8)
 
 PORTABILITY
 -----------
@@ -155,12 +156,10 @@ HOST[/MASK] LOCAL-PORTRANGE REMOTE-PORTRANGE -> POLICY
 
 d.d.d.d[/n] (*|l[:h]) (*|l[:h]) -> POLICY
 xxxx::xxxx[/n] (*|l[:h]) (*|l[:h]) -> POLICY
-host.dns.name (*|l[:h]) (*|l[:h]) -> POLICY
 
 HOST: one of the following
   IPv4 dotted decimal format only (eg: 127.0.0.1)
   All IPv6 RFC-valid formats should be accepted, including IPv4-in-IPv6.
-  DNS name that the remote host must match when reverse-DNS is queried.
 
 MASK:
   Optional network mask that will be applied to IPV[46]HOST when comparing
@@ -206,14 +205,14 @@ example of .ident:
 192.168.0.0/16 * * -> accept
 
 The first rule will match any host asking about any of our connections to its
-ports 6667, 6668, 6669, or 7000.  nident will reply to these queries with an
-eight character BLAKE-derived hash constructed from the username that owns the
-connection, the ip of the machine making the query, and the port number to
-which we are connected.  This rule would perhaps be useful for connecting to
-irc servers that demand an ident response, as the hash will be the same on
-subsequent connections to the same port on the same server.  Note that because
-the IPV4 space is a strict subset of the IPV6 address space
-(A.B.C.D -> ::ffff:AB:CD), this rule will match both IPV4 and IPV6 connections.
+ports 6667, 6668, 6669, or 7000.  nident will reply to these queries with a
+56-bit crypto hash constructed from the username that owns the connection, the
+ip of the machine making the query, and the port number to which we are
+connected.  This rule would perhaps be useful for connecting to irc servers
+that demand an ident response, as the hash will be the same on subsequent
+connections to the same port on the same server.  Note that because the IPV4
+space is a strict subset of the IPV6 address space (A.B.C.D -> ::ffff:AB:CD),
+this rule will match both IPV4 and IPV6 connections.
 
 The second rule is rather more simple than the first.  It will only match
 queries from the local machine (::1) asking who owns connections to port 113 on
