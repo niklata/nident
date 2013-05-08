@@ -141,7 +141,7 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
                    *spoofstart;
         int hport, lport;
 
-        unsigned int cs = 0;
+        int cs = 0;
         const char *p = l.c_str();
         const char *pe = p + l.size();
         const char *eof = pe;

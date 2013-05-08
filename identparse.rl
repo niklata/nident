@@ -55,7 +55,7 @@
 // Returns ParseInvalid if the object needs to be destroyed by the caller.
 IdentClient::ParseState IdentClient::parse_request()
 {
-    unsigned int cs = 0;
+    int cs = 0;
     const char *p = inbuf_.c_str();
     const char *pe = p + inbuf_.size();
     const char *eof = pe;
