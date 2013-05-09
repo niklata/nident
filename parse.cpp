@@ -150,6 +150,16 @@ std::string Parse::get_response(ba::ip::address sa, int sp,
     return ret;
 }
 
+static char cmap[] = {
+    '0','1','2','3','4','5','6','7','8','9',
+    'a','b','c','d','e','f','g','h','i','j',
+    'k','l','m','n','o','p','q','r','s','t',
+    'u','v','w','x','y','z','A','B','C','D',
+    'E','F','G','H','I','J','K','L','M','N',
+    'O','P','Q','R','S','T','U','V','W','X',
+    'Y','Z','_','.'
+};
+
 /*  Technically ident allows username replies that consist of any valid octet
  *  that is not one of [\0\r\n].  It is most important to pick an destination
  *  alphabet size that divides the source alphabet size evenly so that the
@@ -169,22 +179,8 @@ std::string Parse::compress_64_to_unix(uint64_t qword)
     char buf[9];
     buf[8] = '\0';
     b.i = qword;
-    for (int i = 0; i < 8; ++i) {
-        b.c[i] = b.c[i] % 64;
-        b.c[i] += 46; // incl '.'
-        if (b.c[i] > 46) {
-            b.c[i] += 1; // skip '/'
-            if (b.c[i] > 57) {
-                b.c[i] += 7;
-                if (b.c[i] > 90) {
-                    b.c[i] += 4; // incl '_'
-                    if (b.c[i] > 95)
-                        b.c[i] += 1; // skip '`'
-                }
-            }
-        }
-        buf[i] = static_cast<char>(b.c[i]);
-    }
+    for (int i = 0; i < 8; ++i)
+        buf[i] = cmap[b.c[i] & 0x3f];
     return std::string(buf);
 }
 
