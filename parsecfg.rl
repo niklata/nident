@@ -97,7 +97,7 @@ namespace ba = boost::asio;
     p_hash   = ('hash'i % SetPolHash) (ws+ hashes)+;
 
     ipv4   = digit{1,3} '.' digit{1,3} '.' digit{1,3} '.' digit{1,3};
-    ipv6   = (xdigit{1,4}|':')+;
+    ipv6   = xdigit{0,4} (':'xdigit{0,4}){2,7}+;
     maskip = '/' digit{1,3};
     portr  = ('*'|(digit{1,5} > PortLoSt % PortLoEn)(':'(digit{1,5} > PortHiSt % PortHiEn))?);
     policy = (p_deny|p_accept|p_spoof|p_hash);
