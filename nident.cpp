@@ -306,8 +306,8 @@ int main(int ac, char *av[]) {
         auto ep = boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v6(), 113);
         listeners.emplace_back(nk::make_unique<ClientListener>(ep));
     } else
-        for (auto i = addrlist.cbegin(); i != addrlist.cend(); ++i) {
-            std::string addr = *i;
+        for (const auto &i: addrlist) {
+            std::string addr(i);
             int port = 113;
             auto loc = addr.rfind(":");
             if (loc != std::string::npos) {
