@@ -31,6 +31,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <fstream>
 
 #include <unistd.h>
 #include <stdio.h>
@@ -75,12 +76,15 @@ extern "C" {
 namespace po = boost::program_options;
 
 boost::asio::io_service io_service;
+static std::vector<std::unique_ptr<ClientListener>> listeners;
 std::unique_ptr<Netlink> nlink;
 bool gParanoid = false;
 bool gChrooted = false;
 #define SALTC1 0x3133731337313373
 #define SALTC2 0xd3adb33fd3adb33f
 uint64_t gSaltK0 = SALTC1, gSaltK1 = SALTC2;
+static int nident_uid, nident_gid;
+static bool v4only = false;
 
 static void sighandler(int sig)
 {
@@ -161,29 +165,32 @@ static int enforce_seccomp(void)
     return 0;
 }
 
-int main(int ac, char *av[]) {
-    int uid = 0, gid = 0;
-    bool v4only = false;
-    std::string pidfile, chroot_path;
-    std::vector<std::unique_ptr<ClientListener>> listeners;
-    std::vector<std::string> addrlist;
+static po::variables_map fetch_options(int ac, char *av[])
+{
+    std::string config_file;
 
-    gflags_log_name = const_cast<char *>("nident");
-
-    po::options_description desc("Options");
-    desc.add_options()
-        ("paranoid,p",
-         "return UNKNOWN-ERROR for all errors except INVALID-PORT (prevents inference of used ports)")
+    po::options_description cli_opts("Command-line-exclusive options");
+    cli_opts.add_options()
+        ("config,c", po::value<std::string>(&config_file),
+         "path to configuration file")
         ("detach,d", "run as a background daemon (default)")
         ("nodetach,n", "stay attached to TTY")
         ("quiet,q", "don't print to std(out|err) or log")
+        ("help,h", "print help message")
+        ("version,v", "print version information")
+        ;
+
+    po::options_description gopts("Options");
+    gopts.add_options()
+        ("paranoid,p",
+         "return UNKNOWN-ERROR for all errors except INVALID-PORT (prevents inference of used ports)")
         ("pidfile,f", po::value<std::string>(),
          "path to process id file")
-        ("chroot,c", po::value<std::string>(),
+        ("chroot,C", po::value<std::string>(),
          "path in which nident should chroot itself")
         ("max-bytes,b", po::value<int>(),
          "maximum number of bytes allowed from a client")
-        ("address,a", po::value<std::vector<std::string> >(),
+        ("address,a", po::value<std::vector<std::string> >()->composing(),
          "'address[:port]' on which to listen (default all local)")
         ("user,u", po::value<std::string>(),
          "user name that nident should run as")
@@ -191,27 +198,41 @@ int main(int ac, char *av[]) {
          "group name that nident should run as")
         ("salt,s", po::value<std::string>(),
          "string that should be used as salt for hash replies")
-        ("v4-only,4", "host kernel doesn't support ipv6")
-        ("help,h", "print help message")
-        ("version,v", "print version information")
+        ("disable-ipv6", "host kernel doesn't support ipv6")
         ;
+
+    po::options_description cmdline_options;
+    cmdline_options.add(cli_opts).add(gopts);
+    po::options_description cfgfile_options;
+    cfgfile_options.add(gopts);
+
     po::positional_options_description p;
     p.add("address", -1);
     po::variables_map vm;
     try {
         po::store(po::command_line_parser(ac, av).
-                  options(desc).positional(p).run(), vm);
+                  options(cmdline_options).positional(p).run(), vm);
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
     }
     po::notify(vm);
 
+    if (config_file.size()) {
+        std::ifstream ifs(config_file.c_str());
+        if (!ifs) {
+            std::cerr << "Could not open config file: " << config_file << "\n";
+            std::exit(EXIT_FAILURE);
+        }
+        po::store(po::parse_config_file(ifs, cfgfile_options), vm);
+        po::notify(vm);
+    }
+
     if (vm.count("help")) {
         std::cout << "nident " << NIDENT_VERSION << ", ident server.\n"
                   << "Copyright (c) 2010-2013 Nicholas J. Kain\n"
                   << av[0] << " [options] addresses...\n"
-                  << desc << std::endl;
-        return 1;
+                  << gopts << std::endl;
+        std::exit(EXIT_FAILURE);
     }
     if (vm.count("version")) {
         std::cout << "nident " << NIDENT_VERSION << ", ident server.\n" <<
@@ -235,8 +256,18 @@ int main(int ac, char *av[]) {
             "CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)\n"
             "ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE\n"
             "POSSIBILITY OF SUCH DAMAGE.\n";
-        return 1;
+        std::exit(EXIT_FAILURE);
     }
+    return vm;
+}
+
+static void process_options(int ac, char *av[])
+{
+    std::vector<std::string> addrlist;
+    std::string pidfile, chroot_path;
+
+    auto vm(fetch_options(ac, av));
+
     if (vm.count("paranoid"))
         gParanoid = true;
     if (vm.count("detach"))
@@ -245,7 +276,7 @@ int main(int ac, char *av[]) {
         gflags_detach = 0;
     if (vm.count("quiet"))
         gflags_quiet = 1;
-    if (vm.count("v4-only"))
+    if (vm.count("disable-ipv6"))
         v4only = true;
     if (vm.count("max-bytes")) {
         max_client_bytes = vm["max-bytes"].as<int>();
@@ -263,24 +294,24 @@ int main(int ac, char *av[]) {
     if (vm.count("user")) {
         auto t = vm["user"].as<std::string>();
         try {
-            uid = boost::lexical_cast<unsigned int>(t);
+            nident_uid = boost::lexical_cast<unsigned int>(t);
         } catch (const boost::bad_lexical_cast&) {
             auto pws = getpwnam(t.c_str());
             if (pws) {
-                uid = (int)pws->pw_uid;
-                if (!gid)
-                    gid = (int)pws->pw_gid;
+                nident_uid = (int)pws->pw_uid;
+                if (!nident_gid)
+                    nident_gid = (int)pws->pw_gid;
             } else suicide("invalid uid specified");
         }
     }
     if (vm.count("group")) {
         auto t = vm["group"].as<std::string>();
         try {
-            gid = boost::lexical_cast<unsigned int>(t);
+            nident_gid = boost::lexical_cast<unsigned int>(t);
         } catch (const boost::bad_lexical_cast&) {
             auto grp = getgrnam(t.c_str());
             if (grp) {
-                gid = (int)grp->gr_gid;
+                nident_gid = (int)grp->gr_gid;
             } else suicide("invalid gid specified");
         }
     }
@@ -290,17 +321,6 @@ int main(int ac, char *av[]) {
         gSaltK1 = nk::siphash24_hash(gSaltK0, SALTC1 ^ SALTC2,
                                      sst.c_str(), sst.size());
     }
-
-    if (gflags_detach)
-        if (daemon(0,0))
-            suicide("detaching fork failed");
-
-    if (pidfile.size() && file_exists(pidfile.c_str(), "w"))
-        write_pid(pidfile.c_str());
-
-    umask(077);
-    fix_signals();
-    ncm_fix_env(uid, 0);
 
     if (!addrlist.size()) {
         auto ep = boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v6(), 113);
@@ -328,12 +348,22 @@ int main(int ac, char *av[]) {
                 std::cout << "bad address: " << addr << std::endl;
             }
         }
-    addrlist.clear();
+
+    if (gflags_detach)
+        if (daemon(0,0))
+            suicide("detaching fork failed");
+
+    if (pidfile.size() && file_exists(pidfile.c_str(), "w"))
+        write_pid(pidfile.c_str());
+
+    umask(077);
+    fix_signals();
+    ncm_fix_env(nident_uid, 0);
 
     nlink = nk::make_unique<Netlink>(v4only);
     if (!nlink->open(NETLINK_INET_DIAG)) {
         std::cerr << "failed to create netlink socket" << std::endl;
-        exit(EXIT_FAILURE);
+        std::exit(EXIT_FAILURE);
     }
 
     if (chroot_path.size()) {
@@ -344,19 +374,22 @@ int main(int ac, char *av[]) {
         if (chroot(chroot_path.c_str()))
             suicide("failed to chroot(%s)\n", chroot_path.c_str());
         gChrooted = true;
-        chroot_path.clear();
     }
-    if (uid != 0 || gid != 0)
-        drop_root(uid, gid);
-
-    /* Cover our tracks... */
-    pidfile.clear();
+    if (nident_uid != 0 || nident_gid != 0)
+        drop_root(nident_uid, nident_gid);
 
     if (enforce_seccomp())
         log_line("seccomp filter cannot be installed");
+}
+
+int main(int ac, char *av[])
+{
+    gflags_log_name = const_cast<char *>("nident");
+
+    process_options(ac, av);
 
     io_service.run();
 
-    exit(EXIT_SUCCESS);
+    std::exit(EXIT_SUCCESS);
 }
 
