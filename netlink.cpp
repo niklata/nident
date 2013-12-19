@@ -31,7 +31,8 @@
 #include "netlink.hpp"
 namespace ba = boost::asio;
 
-Netlink::Netlink(bool v4only) : v4only_(v4only), fd_(-1), socktype_(-1) {}
+Netlink::Netlink(bool v4only) : v4only_(v4only), fd_(-1), socktype_(-1),
+    portid_(0), seq_(0) {}
 Netlink::~Netlink() { close(fd_); }
 
 size_t Netlink::bc_size() const
