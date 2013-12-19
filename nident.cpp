@@ -57,6 +57,7 @@
 #include "identclient.hpp"
 #include "netlink.hpp"
 #include "siphash.hpp"
+#include "make_unique.hpp"
 
 extern "C" {
 #include "defines.h"
@@ -303,8 +304,7 @@ int main(int ac, char *av[]) {
 
     if (!addrlist.size()) {
         auto ep = boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v6(), 113);
-        listeners.emplace_back(std::unique_ptr<ClientListener>(
-                                   new ClientListener(ep)));
+        listeners.emplace_back(nk::make_unique<ClientListener>(ep));
     } else
         for (auto i = addrlist.cbegin(); i != addrlist.cend(); ++i) {
             std::string addr = *i;
@@ -323,15 +323,14 @@ int main(int ac, char *av[]) {
             try {
                 auto addy = boost::asio::ip::address::from_string(addr);
                 auto ep = boost::asio::ip::tcp::endpoint(addy, port);
-                listeners.emplace_back(std::unique_ptr<ClientListener>(
-                                            new ClientListener(ep)));
+                listeners.emplace_back(nk::make_unique<ClientListener>(ep));
             } catch (const boost::system::error_code&) {
                 std::cout << "bad address: " << addr << std::endl;
             }
         }
     addrlist.clear();
 
-    nlink = std::unique_ptr<Netlink>(new Netlink(v4only));
+    nlink = nk::make_unique<Netlink>(v4only);
     if (!nlink->open(NETLINK_INET_DIAG)) {
         std::cerr << "failed to create netlink socket" << std::endl;
         exit(EXIT_FAILURE);
