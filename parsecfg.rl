@@ -33,6 +33,8 @@
 #include <stdint.h>
 #include <pwd.h>
 
+#include "asio_addrcmp.hpp"
+
 extern "C" {
 #include "log.h"
 }
@@ -156,11 +158,11 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
 
         if (cs < cfg_parser_first_final)
             continue;
-        if (!port_in_bounds(sp, ci.low_lport, ci.high_lport))
+        if (!nk::asio::port_in_bounds(sp, ci.low_lport, ci.high_lport))
             continue;
-        if (!port_in_bounds(cp, ci.low_rport, ci.high_rport))
+        if (!nk::asio::port_in_bounds(cp, ci.low_rport, ci.high_rport))
             continue;
-        if (!compare_ip(ca, ci.host, ci.mask == -1 ? 0 : ci.mask))
+        if (!nk::asio::compare_ip(ca, ci.host, ci.mask == -1 ? 0 : ci.mask))
             continue;
         found_ci_ = true;
         ci_ = ci;

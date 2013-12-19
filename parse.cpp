@@ -44,68 +44,6 @@ namespace ba = boost::asio;
 extern bool gParanoid;
 extern uint64_t gSaltK0, gSaltK1;
 
-bool Parse::port_in_bounds(int port, int lo, int hi)
-{
-    if (hi < 0)
-        hi = lo;
-    if (lo >= 0) {
-        if (port < lo || port > hi)
-            return false;
-    }
-    return true;
-}
-
-bool Parse::compare_ip(ba::ip::address ip, ba::ip::address mask, int msize)
-{
-    ba::ip::address_v6 ip6(ip.is_v4() ? ba::ip::address_v6::v4_mapped(ip.to_v4())
-                           : ip.to_v6()), mask6;
-    if (mask.is_v4()) {
-        mask6 = ba::ip::address_v6::v4_mapped(mask.to_v4());
-        msize += 96;
-    } else
-        mask6 = mask.to_v6();
-    msize = std::min(msize, 128);
-    return compare_ipv6(ip6.to_bytes(), mask6.to_bytes(), msize);
-}
-
-bool Parse::compare_ipv6(ba::ip::address_v6::bytes_type ip,
-                         ba::ip::address_v6::bytes_type mask, int msize)
-{
-    if (msize > 128 || msize < 0)
-        return false;
-
-    uint64_t *idx, *idxm;
-    idx = reinterpret_cast<uint64_t *>(&ip);
-    idxm = reinterpret_cast<uint64_t *>(&mask);
-
-    // these are stored in network byte order, not host byte order
-    uint64_t b = idx[1];
-    uint64_t a = idx[0];
-    uint64_t mb = idxm[1];
-    uint64_t ma = idxm[0];
-
-    int incl_qwords = msize / 64;
-    int incl_bits = msize % 64;
-
-    if (incl_qwords == 0 && incl_bits == 0) { // wildcard mask
-        return true;
-    } else if (ma == 0 && mb == 0) { // wildcard
-        return true;
-    } else if (incl_qwords == 0 && incl_bits) {
-        for (int i = 63 - incl_bits; i >= 0; --i) {
-            a |= 1 << i;
-            ma |= 1 << i;
-        }
-        b = mb;
-    } else if (incl_qwords == 1 && incl_bits) {
-        for (int i = 63 - incl_bits; i >= 0; --i) {
-            b |= 1 << i;
-            mb |= 1 << i;
-        }
-    }
-    return a == ma && b == mb;
-}
-
 std::string Parse::get_response(ba::ip::address sa, int sp,
                                 ba::ip::address ca, int cp, int uid)
 {
