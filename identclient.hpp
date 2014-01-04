@@ -30,14 +30,14 @@
 #define NK_IDENTCLIENT_H
 
 #include <string>
+#include <memory>
 #include <netdb.h>
 
 #include <boost/array.hpp>
 #include <boost/asio.hpp>
-#include <boost/enable_shared_from_this.hpp>
 
 class IdentClient
-    : public boost::enable_shared_from_this<IdentClient>
+    : public std::enable_shared_from_this<IdentClient>
 {
 public:
     enum IdentClientState {
