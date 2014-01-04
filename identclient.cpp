@@ -152,7 +152,7 @@ bool IdentClient::process_input()
 // State can change: STATE_GOTIN -> STATE_WAITOUT
 bool IdentClient::create_reply()
 {
-    std::string reply;
+    std::string reply{"ERROR:UNKNOWN-ERROR"};
 
     outbuf_.clear();
 
@@ -175,9 +175,7 @@ bool IdentClient::create_reply()
         uid = nlink->get_tcp_uid(server_address_, server_port_,
                                  client_address_, client_port_);
         if (uid == -1) {
-            if (gParanoid)
-                reply = "ERROR:UNKNOWN-ERROR";
-            else
+            if (!gParanoid)
                 reply = "ERROR:NO-USER";
         } else {
             std::string path;
@@ -200,12 +198,8 @@ bool IdentClient::create_reply()
                                             uid);
             }
         }
-        if (!reply.size()) {
-            if (gParanoid)
-                reply = "ERROR:UNKNOWN-ERROR";
-            else
+        if (!gParanoid && !reply.size())
                 reply = "ERROR:HIDDEN-USER";
-        }
     }
 
     outbuf_ =  boost::lexical_cast<std::string>(server_port_);
