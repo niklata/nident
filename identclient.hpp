@@ -33,7 +33,6 @@
 #include <memory>
 #include <netdb.h>
 
-#include <boost/array.hpp>
 #include <boost/asio.hpp>
 
 class IdentClient
@@ -63,7 +62,7 @@ private:
 
     IdentClientState state_;
     boost::asio::ip::tcp::socket tcp_socket_;
-    boost::array<char, 4096> inBytes_;
+    std::array<char, 64> inBytes_;
     std::string inbuf_;
     bool writePending_;
     std::string outbuf_;
