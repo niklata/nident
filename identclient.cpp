@@ -1,6 +1,6 @@
 /* identclient.cpp - ident client request handling
  *
- * (c) 2010-2013 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2010-2014 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,6 @@
 #include <sys/types.h>
 #include <pwd.h>
 
-#include <boost/bind.hpp>
 #include <boost/lexical_cast.hpp>
 
 #include "identclient.hpp"
@@ -61,62 +60,59 @@ IdentClient::IdentClient(ba::io_service &io_service)
 
 void IdentClient::do_read()
 {
+    auto sfd(shared_from_this());
     tcp_socket_.async_read_some
         (ba::buffer(inBytes_),
-         boost::bind(&IdentClient::read_handler, shared_from_this(),
-                     ba::placeholders::error,
-                     ba::placeholders::bytes_transferred));
-}
-
-void IdentClient::read_handler(const boost::system::error_code &ec,
-                                    std::size_t bytes_xferred)
-{
-    if (state_ != STATE_DONE && ec) {
-        std::cerr << "Client read error: "
-                  << boost::system::system_error(ec).what() << std::endl;
-        return;
-    }
-    if (!bytes_xferred)
-        return;
-    inbuf_.append(inBytes_.data(), bytes_xferred);
-    if (!process_input()) {
-        state_ = STATE_DONE;
-        tcp_socket_.cancel();
-        tcp_socket_.close();
-        return;
-    }
-    do_read();
+         [this, sfd](const boost::system::error_code &ec,
+                     std::size_t bytes_xferred)
+         {
+             if (state_ != STATE_DONE && ec) {
+                 std::cerr << "Client read error: "
+                           << boost::system::system_error(ec).what()
+                           << std::endl;
+                 return;
+             }
+             if (!bytes_xferred)
+                 return;
+             inbuf_.append(inBytes_.data(), bytes_xferred);
+             if (!process_input()) {
+                 state_ = STATE_DONE;
+                 tcp_socket_.cancel();
+                 tcp_socket_.close();
+                 return;
+             }
+             do_read();
+         });
 }
 
 void IdentClient::do_write()
 {
     assert(!writePending_);
     writePending_ = true;
+    auto sfd(shared_from_this());
+    // State can change: STATE_WAITOUT -> STATE_DONE
     ba::async_write(
         tcp_socket_, ba::buffer(outbuf_),
-        boost::bind(&IdentClient::write_handler, shared_from_this(),
-                    ba::placeholders::error,
-                    ba::placeholders::bytes_transferred));
-}
+        [this, sfd](const boost::system::error_code &ec,
+                    std::size_t bytes_xferred)
+        {
+            writePending_ = false;
+            if (ec) {
+                std::cerr << "Client write error: "
+                          << boost::system::system_error(ec).what()
+                          << std::endl;
+                return;
+            }
+            outbuf_.erase(0, bytes_xferred);
+            if (outbuf_.size())
+                do_write();
+            else {
+                state_ = STATE_DONE;
+                tcp_socket_.cancel();
+                tcp_socket_.close();
+            }
 
-// State can change: STATE_WAITOUT -> STATE_DONE
-void IdentClient::write_handler(const boost::system::error_code &ec,
-                                     std::size_t bytes_xferred)
-{
-    writePending_ = false;
-    if (ec) {
-        std::cerr << "Client write error: "
-                  << boost::system::system_error(ec).what() << std::endl;
-        return;
-    }
-    outbuf_.erase(0, bytes_xferred);
-    if (outbuf_.size())
-        do_write();
-    else {
-        state_ = STATE_DONE;
-        tcp_socket_.cancel();
-        tcp_socket_.close();
-    }
+        });
 }
 
 void IdentClient::write()
@@ -239,16 +235,14 @@ void ClientListener::start_accept()
 {
     boost::shared_ptr<IdentClient> conn(
         new IdentClient(acceptor_.get_io_service()));
-    acceptor_.async_accept(conn->socket(), boost::bind(
-                               &ClientListener::accept_handler, this,
-                               conn, ba::placeholders::error));
-}
+    acceptor_.async_accept
+        (conn->socket(),
+         [this, conn](const boost::system::error_code &ec)
+         {
+             if (ec)
+                 return;
+             conn->start();
+             start_accept();
 
-void ClientListener::accept_handler(boost::shared_ptr<IdentClient> conn,
-                                    const boost::system::error_code &ec)
-{
-    if (ec)
-        return;
-    conn->start();
-    start_accept();
+         });
 }

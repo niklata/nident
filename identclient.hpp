@@ -1,7 +1,6 @@
 /* identclient.hpp - ident client request handling
- * Time-stamp: <2011-03-27 00:58:18 nk>
  *
- * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2010-2014 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -77,10 +76,6 @@ private:
 
     void do_read();
     void do_write();
-    void read_handler(const boost::system::error_code &ec,
-                      std::size_t bytes_xferred);
-    void write_handler(const boost::system::error_code &ec,
-                       std::size_t bytes_xferred);
     bool process_input();
     bool create_reply();
     void write();
@@ -97,8 +92,6 @@ private:
     boost::asio::ip::tcp::acceptor acceptor_;
 
     void start_accept();
-    void accept_handler(boost::shared_ptr<IdentClient> conn,
-                        const boost::system::error_code &ec);
 };
 
 extern unsigned int max_client_bytes;
