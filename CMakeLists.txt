@@ -11,6 +11,7 @@ add_subdirectory(ncmlib)
 find_package( Boost COMPONENTS system program_options )
 link_directories ( ${Boost_LIBRARY_DIRS} )
 include_directories ( ${Boost_INCLUDE_DIRS} )
+find_package(Threads)
 
 set(RAGEL_PARSECFG ${CMAKE_CURRENT_BINARY_DIR}/parsecfg.cpp)
 set(RAGEL_IDENTPARSE ${CMAKE_CURRENT_BINARY_DIR}/identparse.cpp)
@@ -55,10 +56,12 @@ set(PTEST_SRCS
   )
 
 add_executable(nident ${RAGEL_IDENTPARSE} ${RAGEL_PARSECFG} ${NIDENT_SRCS})
-target_link_libraries(nident ${Boost_LIBRARIES} ncmlib)
+target_link_libraries(nident ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
+                             ncmlib)
 
 add_executable(nl-test ${NLTEST_SRCS})
-target_link_libraries(nl-test ${Boost_LIBRARIES})
+target_link_libraries(nl-test ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES})
 
 add_executable(parsetest ${RAGEL_PARSECFG} ${PTEST_SRCS})
-target_link_libraries(parsetest ${Boost_LIBRARIES} ncmlib)
+target_link_libraries(parsetest ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
+                                ncmlib)
