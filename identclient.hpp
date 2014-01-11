@@ -46,10 +46,9 @@ public:
         STATE_DONE
     };
 
-    IdentClient(boost::asio::io_service &io_service);
+    IdentClient(boost::asio::ip::tcp::socket socket);
 
     void start() { do_read(); }
-    boost::asio::ip::tcp::socket &socket() { return tcp_socket_; }
 
 private:
     enum ParseState {
@@ -89,6 +88,7 @@ public:
     const boost::asio::ip::tcp::acceptor &socket() { return acceptor_; }
 private:
     boost::asio::ip::tcp::acceptor acceptor_;
+    boost::asio::ip::tcp::socket socket_;
 
     void start_accept();
 };

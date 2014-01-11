@@ -51,12 +51,10 @@ extern bool gChrooted;
 
 unsigned int max_client_bytes = 128;
 
-IdentClient::IdentClient(ba::io_service &io_service)
-        : tcp_socket_(io_service)
-{
-    state_ = STATE_WAITIN;
-    writePending_ = false;
-}
+IdentClient::IdentClient(ba::ip::tcp::socket socket)
+        : state_(STATE_WAITIN), tcp_socket_(std::move(socket)),
+          writePending_(false)
+{}
 
 void IdentClient::do_read()
 {
@@ -216,7 +214,7 @@ bool IdentClient::create_reply()
 }
 
 ClientListener::ClientListener(const ba::ip::tcp::endpoint &endpoint)
-        : acceptor_(io_service)
+        : acceptor_(io_service), socket_(io_service)
 {
     acceptor_.open(endpoint.protocol());
     acceptor_.set_option(ba::ip::tcp::acceptor::reuse_address(true));
@@ -227,15 +225,14 @@ ClientListener::ClientListener(const ba::ip::tcp::endpoint &endpoint)
 
 void ClientListener::start_accept()
 {
-    auto conn = std::make_shared<IdentClient>(acceptor_.get_io_service());
     acceptor_.async_accept
-        (conn->socket(),
-         [this, conn](const boost::system::error_code &ec)
+        (socket_,
+         [this](const boost::system::error_code &ec)
          {
              if (ec)
                  return;
+             auto conn = std::make_shared<IdentClient>(std::move(socket_));
              conn->start();
              start_accept();
-
          });
 }
