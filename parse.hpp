@@ -1,5 +1,5 @@
 /* parse.hpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2011-03-28 21:04:40 nk>
+ * Time-stamp: <2014-01-11 08:55:32 njk>
  *
  * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -32,8 +32,10 @@
 
 #include <string>
 #include <boost/asio.hpp>
+#include <boost/utility.hpp>
 
-class Parse {
+class Parse : boost::noncopyable
+{
 public:
     enum PolicyAction {
         PolicyDeny,

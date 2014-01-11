@@ -34,9 +34,10 @@
 #include <netdb.h>
 
 #include <boost/asio.hpp>
+#include <boost/utility.hpp>
 
 class IdentClient
-    : public std::enable_shared_from_this<IdentClient>
+    : public std::enable_shared_from_this<IdentClient>, boost::noncopyable
 {
 public:
     enum IdentClientState {
@@ -81,7 +82,7 @@ private:
     ParseState parse_request();
 };
 
-class ClientListener
+class ClientListener : boost::noncopyable
 {
 public:
     ClientListener(const boost::asio::ip::tcp::endpoint &endpoint);
