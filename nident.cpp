@@ -88,7 +88,7 @@ static bool v4only = false;
 
 static void sighandler(int sig)
 {
-    exit(EXIT_SUCCESS);
+    io_service.stop();
 }
 
 static void fix_signals(void) {
