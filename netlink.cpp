@@ -354,7 +354,8 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     iov[0].iov_base = &req;
     iov[0].iov_len = sizeof req;
     size_t bclen = bc_size();
-    char bcbuf[bclen];
+    char bcbuf[2 * (sizeof(struct inet_diag_bc_op)
+                    + sizeof(struct inet_diag_hostcond) + 16)];
     memset(bcbuf, 0, sizeof bcbuf);
     create_bc(bcbuf, sp, dp);
     rta.rta_type = INET_DIAG_REQ_BYTECODE;
