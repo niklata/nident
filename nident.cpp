@@ -62,15 +62,11 @@
 
 extern "C" {
 #include "defines.h"
-#include "malloc.h"
 #include "log.h"
 #include "chroot.h"
 #include "pidfile.h"
-#include "strl.h"
-#include "exec.h"
-#include "network.h"
-#include "strlist.h"
 #include "seccomp-bpf.h"
+#include "exec.h"
 }
 
 namespace po = boost::program_options;
