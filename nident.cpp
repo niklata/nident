@@ -1,6 +1,6 @@
-/* nident.c - ident server
+/* nident.cpp - ident server
  *
- * (c) 2004-2013 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2004-2014 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -115,21 +115,31 @@ static int enforce_seccomp(void)
     struct sock_filter filter[] = {
         VALIDATE_ARCHITECTURE,
         EXAMINE_SYSCALL,
+
+#if defined(__x86_64__) || (defined(__arm__) && defined(__ARM_EABI__))
         ALLOW_SYSCALL(sendmsg),
         ALLOW_SYSCALL(recvmsg),
-        ALLOW_SYSCALL(read),
-        ALLOW_SYSCALL(write),
         ALLOW_SYSCALL(sendto), // used for glibc syslog routines
-        ALLOW_SYSCALL(epoll_wait),
-        ALLOW_SYSCALL(epoll_ctl),
         ALLOW_SYSCALL(getpeername),
         ALLOW_SYSCALL(getsockname),
-        ALLOW_SYSCALL(stat),
-        ALLOW_SYSCALL(open),
-        ALLOW_SYSCALL(close),
         ALLOW_SYSCALL(connect),
         ALLOW_SYSCALL(socket),
         ALLOW_SYSCALL(accept),
+        ALLOW_SYSCALL(fcntl),
+#elif defined(__i386__)
+        ALLOW_SYSCALL(socketcall),
+        ALLOW_SYSCALL(fcntl64),
+#else
+#error Target platform does not support seccomp-filter.
+#endif
+
+        ALLOW_SYSCALL(read),
+        ALLOW_SYSCALL(write),
+        ALLOW_SYSCALL(epoll_wait),
+        ALLOW_SYSCALL(epoll_ctl),
+        ALLOW_SYSCALL(stat),
+        ALLOW_SYSCALL(open),
+        ALLOW_SYSCALL(close),
         ALLOW_SYSCALL(ioctl),
         ALLOW_SYSCALL(rt_sigreturn),
 #ifdef __NR_sigreturn
@@ -158,6 +168,7 @@ static int enforce_seccomp(void)
         return -1;
     if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog))
         return -1;
+    log_line("seccomp filter installed.  Please disable seccomp if you encounter problems.");
     return 0;
 }
 
@@ -195,6 +206,7 @@ static po::variables_map fetch_options(int ac, char *av[])
         ("salt,s", po::value<std::string>(),
          "string that should be used as salt for hash replies")
         ("disable-ipv6", "host kernel doesn't support ipv6")
+        ("seccomp-enforce,S", "enforce seccomp syscall restrictions")
         ;
 
     po::options_description cmdline_options;
@@ -261,6 +273,7 @@ static void process_options(int ac, char *av[])
 {
     std::vector<std::string> addrlist;
     std::string pidfile, chroot_path;
+    bool use_seccomp(false);
 
     auto vm(fetch_options(ac, av));
 
@@ -317,6 +330,8 @@ static void process_options(int ac, char *av[])
         gSaltK1 = nk::siphash24_hash(gSaltK0, SALTC1 ^ SALTC2,
                                      sst.c_str(), sst.size());
     }
+    if (vm.count("seccomp-enforce"))
+        use_seccomp = true;
 
     if (!addrlist.size()) {
         auto ep = boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v6(), 113);
@@ -374,8 +389,10 @@ static void process_options(int ac, char *av[])
     if (nident_uid != 0 || nident_gid != 0)
         drop_root(nident_uid, nident_gid);
 
-    if (enforce_seccomp())
-        log_line("seccomp filter cannot be installed");
+    if (use_seccomp) {
+        if (enforce_seccomp())
+            log_line("seccomp filter cannot be installed");
+    }
 }
 
 int main(int ac, char *av[])
