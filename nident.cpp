@@ -72,6 +72,7 @@ extern "C" {
 namespace po = boost::program_options;
 
 boost::asio::io_service io_service;
+static boost::asio::signal_set asio_signal_set(io_service);
 static std::vector<std::unique_ptr<ClientListener>> listeners;
 std::unique_ptr<Netlink> nlink;
 bool gParanoid = false;
@@ -82,12 +83,9 @@ uint64_t gSaltK0 = SALTC1, gSaltK1 = SALTC2;
 static int nident_uid, nident_gid;
 static bool v4only = false;
 
-static void sighandler(int sig)
-{
-    io_service.stop();
-}
 
-static void fix_signals(void) {
+static void process_signals()
+{
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGCHLD);
@@ -99,15 +97,12 @@ static void fix_signals(void) {
     sigaddset(&mask, SIGHUP);
     if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0)
         suicide("sigprocmask failed");
-
-    struct sigaction sa;
-    memset(&sa, 0, sizeof (struct sigaction));
-    sa.sa_handler = sighandler;
-    sigemptyset(&sa.sa_mask);
-    sigaddset(&sa.sa_mask, SIGINT);
-    sigaddset(&sa.sa_mask, SIGTERM);
-    sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGTERM, &sa, NULL);
+    asio_signal_set.add(SIGINT);
+    asio_signal_set.add(SIGTERM);
+    asio_signal_set.async_wait(
+        [](const boost::system::error_code &, int signum) {
+            io_service.stop();
+        });
 }
 
 static int enforce_seccomp(void)
@@ -368,7 +363,7 @@ static void process_options(int ac, char *av[])
         write_pid(pidfile.c_str());
 
     umask(077);
-    fix_signals();
+    process_signals();
     ncm_fix_env(nident_uid, 0);
 
     nlink = nk::make_unique<Netlink>(v4only);
@@ -386,9 +381,9 @@ static void process_options(int ac, char *av[])
             suicide("failed to chroot(%s)\n", chroot_path.c_str());
         gChrooted = true;
     }
+
     if (nident_uid != 0 || nident_gid != 0)
         drop_root(nident_uid, nident_gid);
-
     if (use_seccomp) {
         if (enforce_seccomp())
             log_line("seccomp filter cannot be installed");
