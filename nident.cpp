@@ -175,8 +175,7 @@ static po::variables_map fetch_options(int ac, char *av[])
     cli_opts.add_options()
         ("config,c", po::value<std::string>(&config_file),
          "path to configuration file")
-        ("detach,d", "run as a background daemon (default)")
-        ("nodetach,n", "stay attached to TTY")
+        ("background", "run as a background daemon")
         ("quiet,q", "don't print to std(out|err) or log")
         ("help,h", "print help message")
         ("version,v", "print version information")
@@ -274,10 +273,8 @@ static void process_options(int ac, char *av[])
 
     if (vm.count("paranoid"))
         gParanoid = true;
-    if (vm.count("detach"))
+    if (vm.count("background"))
         gflags_detach = 1;
-    if (vm.count("nodetach"))
-        gflags_detach = 0;
     if (vm.count("quiet"))
         gflags_quiet = 1;
     if (vm.count("disable-ipv6"))
