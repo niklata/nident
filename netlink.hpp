@@ -1,7 +1,6 @@
 /* netlink.hpp - netlink abstraction
- * Time-stamp: <2011-03-29 07:07:35 nk>
  *
- * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2011-2014 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
