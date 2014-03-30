@@ -1,6 +1,6 @@
 /* parse.cpp - proc/net/tcp6? and config file parsing
  *
- * (c) 2010-2013 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2010-2014 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,7 +36,7 @@
 #include <pwd.h>
 
 extern "C" {
-#include "log.h"
+#include "nk/log.h"
 }
 
 namespace ba = boost::asio;

@@ -61,12 +61,11 @@
 #include "make_unique.hpp"
 
 extern "C" {
-#include "defines.h"
-#include "log.h"
-#include "chroot.h"
-#include "pidfile.h"
-#include "seccomp-bpf.h"
-#include "exec.h"
+#include "nk/log.h"
+#include "nk/privilege.h"
+#include "nk/pidfile.h"
+#include "nk/seccomp-bpf.h"
+#include "nk/exec.h"
 }
 
 namespace po = boost::program_options;
@@ -361,29 +360,22 @@ static void process_options(int ac, char *av[])
 
     umask(077);
     process_signals();
-    ncm_fix_env(nident_uid, 0);
+    nk_fix_env(nident_uid, 0);
 
     nlink = nk::make_unique<Netlink>(v4only);
-    if (!nlink->open(NETLINK_INET_DIAG)) {
-        std::cerr << "failed to create netlink socket" << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
+    if (!nlink->open(NETLINK_INET_DIAG))
+        suicide("failed to create netlink socket");
 
     if (chroot_path.size()) {
-        if (getuid())
-            suicide("root required for chroot\n");
-        if (chdir(chroot_path.c_str()))
-            suicide("failed to chdir(%s)\n", chroot_path.c_str());
-        if (chroot(chroot_path.c_str()))
-            suicide("failed to chroot(%s)\n", chroot_path.c_str());
+        nk_set_chroot(chroot_path.c_str());
         gChrooted = true;
     }
 
     if (nident_uid != 0 || nident_gid != 0)
-        drop_root(nident_uid, nident_gid);
+        nk_set_uidgid(nident_uid, nident_gid);
     if (use_seccomp) {
         if (enforce_seccomp())
-            log_line("seccomp filter cannot be installed");
+            log_warning("seccomp filter cannot be installed");
     }
 }
 

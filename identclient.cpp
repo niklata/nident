@@ -39,7 +39,7 @@
 #include "netlink.hpp"
 
 extern "C" {
-#include "log.h"
+#include "nk/log.h"
 }
 
 namespace ba = boost::asio;

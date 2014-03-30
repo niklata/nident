@@ -1,7 +1,6 @@
 /* nl-test.cpp - netlink abstraction test code
- * Time-stamp: <2011-03-29 07:12:25 nk>
  *
- * (c) 2011 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2011-2014 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -84,19 +83,19 @@ int main(int argc, const char *argv[])
 
     if (!sastr.size()) {
         std::cerr << "no source address specified\n";
-        exit(-1);
+        return -1;
     }
     if (!sp) {
         std::cerr << "no source port specified\n";
-        exit(-1);
+        return -1;
     }
     if (!dastr.size()) {
         std::cerr << "no destination address specified\n";
-        exit(-1);
+        return -1;
     }
     if (!dp) {
         std::cerr << "no destination port specified\n";
-        exit(-1);
+        return -1;
     }
 
     std::cout << "src: " << sastr << ":" << sp << " dst: " << dastr << ":" << dp
