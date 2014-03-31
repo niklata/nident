@@ -79,7 +79,8 @@ bool gChrooted = false;
 #define SALTC1 0x3133731337313373
 #define SALTC2 0xd3adb33fd3adb33f
 uint64_t gSaltK0 = SALTC1, gSaltK1 = SALTC2;
-static int nident_uid, nident_gid;
+static uid_t nident_uid;
+static gid_t nident_gid;
 static bool v4only = false;
 
 
@@ -293,27 +294,11 @@ static void process_options(int ac, char *av[])
         addrlist = vm["address"].as<std::vector<std::string> >();
     if (vm.count("user")) {
         auto t = vm["user"].as<std::string>();
-        try {
-            nident_uid = boost::lexical_cast<unsigned int>(t);
-        } catch (const boost::bad_lexical_cast&) {
-            auto pws = getpwnam(t.c_str());
-            if (pws) {
-                nident_uid = (int)pws->pw_uid;
-                if (!nident_gid)
-                    nident_gid = (int)pws->pw_gid;
-            } else suicide("invalid uid specified");
-        }
+        nident_uid = nk_uidgidbyname(t.c_str(), &nident_gid);
     }
     if (vm.count("group")) {
         auto t = vm["group"].as<std::string>();
-        try {
-            nident_gid = boost::lexical_cast<unsigned int>(t);
-        } catch (const boost::bad_lexical_cast&) {
-            auto grp = getgrnam(t.c_str());
-            if (grp) {
-                nident_gid = (int)grp->gr_gid;
-            } else suicide("invalid gid specified");
-        }
+        nident_gid = nk_gidbyname(t.c_str());
     }
     if (vm.count("salt")) {
         auto sst = vm["salt"].as<std::string>();
