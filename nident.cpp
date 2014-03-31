@@ -195,8 +195,6 @@ static po::variables_map fetch_options(int ac, char *av[])
          "'address[:port]' on which to listen (default all local)")
         ("user,u", po::value<std::string>(),
          "user name that nident should run as")
-        ("group,g", po::value<std::string>(),
-         "group name that nident should run as")
         ("salt,s", po::value<std::string>(),
          "string that should be used as salt for hash replies")
         ("disable-ipv6", "host kernel doesn't support ipv6")
@@ -294,11 +292,8 @@ static void process_options(int ac, char *av[])
         addrlist = vm["address"].as<std::vector<std::string> >();
     if (vm.count("user")) {
         auto t = vm["user"].as<std::string>();
-        nident_uid = nk_uidgidbyname(t.c_str(), &nident_gid);
-    }
-    if (vm.count("group")) {
-        auto t = vm["group"].as<std::string>();
-        nident_gid = nk_gidbyname(t.c_str());
+        if (nk_uidgidbyname(t.c_str(), &nident_uid, &nident_gid))
+            suicide("invalid user '%s' specified", t.c_str());
     }
     if (vm.count("salt")) {
         auto sst = vm["salt"].as<std::string>();
