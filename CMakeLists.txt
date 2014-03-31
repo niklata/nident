@@ -18,8 +18,9 @@ endif()
 
 if (${OSNAME} STREQUAL "Linux")
   message("Detected that the current host is a Linux system.")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLINUX -DHAVE_CLEARENV")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLINUX -DHAVE_CLEARENV")
+else()
+  message("nident requires a Linux host system for netlink support.")
+  return()
 endif()
 
 include_directories("${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/ncmlib")
