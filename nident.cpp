@@ -352,7 +352,7 @@ static void process_options(int ac, char *av[])
     }
 
     if (nident_uid != 0 || nident_gid != 0)
-        nk_set_uidgid(nident_uid, nident_gid);
+        nk_set_uidgid(nident_uid, nident_gid, NULL);
     if (use_seccomp) {
         if (enforce_seccomp())
             log_warning("seccomp filter cannot be installed");
