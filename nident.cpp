@@ -115,12 +115,15 @@ static int enforce_seccomp(void)
         ALLOW_SYSCALL(sendmsg),
         ALLOW_SYSCALL(recvmsg),
         ALLOW_SYSCALL(sendto), // used for glibc syslog routines
+        ALLOW_SYSCALL(recvfrom),
         ALLOW_SYSCALL(getpeername),
         ALLOW_SYSCALL(getsockname),
         ALLOW_SYSCALL(connect),
         ALLOW_SYSCALL(socket),
         ALLOW_SYSCALL(accept),
         ALLOW_SYSCALL(fcntl),
+        ALLOW_SYSCALL(setsockopt),
+        ALLOW_SYSCALL(shutdown),
 #elif defined(__i386__)
         ALLOW_SYSCALL(socketcall),
         ALLOW_SYSCALL(fcntl64),
@@ -150,6 +153,7 @@ static int enforce_seccomp(void)
         ALLOW_SYSCALL(brk),
         ALLOW_SYSCALL(mmap),
         ALLOW_SYSCALL(munmap),
+        ALLOW_SYSCALL(mremap),
 
         ALLOW_SYSCALL(exit_group),
         ALLOW_SYSCALL(exit),
