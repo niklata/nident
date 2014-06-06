@@ -140,8 +140,12 @@ static int enforce_seccomp(void)
         ALLOW_SYSCALL(close),
         ALLOW_SYSCALL(ioctl),
         ALLOW_SYSCALL(rt_sigreturn),
+        ALLOW_SYSCALL(rt_sigaction),
 #ifdef __NR_sigreturn
         ALLOW_SYSCALL(sigreturn),
+#endif
+#ifdef __NR_sigaction
+        ALLOW_SYSCALL(sigaction),
 #endif
         // Allowed by vDSO
         ALLOW_SYSCALL(getcpu),
