@@ -31,7 +31,6 @@
 
 #include <string.h>
 #include <nk/format.hpp>
-#include <boost/lexical_cast.hpp>
 #include <fstream>
 #include <stdint.h>
 #include <pwd.h>
@@ -44,45 +43,41 @@ extern uint64_t gSaltK0, gSaltK1;
 std::string Parse::get_response(ba::ip::address sa, int sp,
                                 ba::ip::address ca, int cp, int uid)
 {
-    std::string ret(32, '\0');
-
     if (!found_ci_ || ci_.policy.action == PolicyDeny) {
         if (gParanoid)
-            ret = "ERROR:UNKNOWN-ERROR";
+            return "ERROR:UNKNOWN-ERROR";
         else
-            ret = "ERROR:HIDDEN-USER";
+            return "ERROR:HIDDEN-USER";
     } else if (ci_.policy.action == PolicyAccept) {
-        ret = "USERID:UNIX:";
-        ret += boost::lexical_cast<std::string>(uid);
+        return fmt::format("USERID:UNIX:{}", uid);
     } else if (ci_.policy.action == PolicySpoof) {
         if (!getpwnam(ci_.policy.spoof.c_str())) {
-            ret = "USERID:UNIX:";
-            ret += ci_.policy.spoof;
+            return fmt::format("USERID:UNIX:{}", ci_.policy.spoof);
         } else {
             // A username exists with the spoof name.
             fmt::print(stderr, "Spoof requested for extant user {}\n",
                        ci_.policy.spoof);
             if (gParanoid)
-                ret = "ERROR:UNKNOWN-ERROR";
+                return "ERROR:UNKNOWN-ERROR";
             else
-                ret = "ERROR:HIDDEN-USER";
+                return "ERROR:HIDDEN-USER";
         }
     } else if (ci_.policy.action == PolicyHash) {
         std::string hs;
         hs.reserve(32);
         if (ci_.policy.isHashUID())
-            hs += boost::lexical_cast<std::string>(uid);
+            hs += fmt::format("{}", uid);
         if (ci_.policy.isHashIP())
             hs += ca.to_string();
         if (ci_.policy.isHashSP())
-            hs += boost::lexical_cast<std::string>(sp);
+            hs += fmt::format("{}", sp);
         if (ci_.policy.isHashCP())
-            hs += boost::lexical_cast<std::string>(cp);
-        ret = "USERID:UNIX:";
-        ret += compress_64_to_unix(nk::siphash24_hash(gSaltK0, gSaltK1,
-                                                      hs.c_str(), hs.size()));
+            hs += fmt::format("{}", cp);
+        return fmt::format("USERID:UNIX:{}", compress_64_to_unix
+                           (nk::siphash24_hash(gSaltK0, gSaltK1,
+                                               hs.c_str(), hs.size())));
     }
-    return ret;
+    return "ERROR:UNKNOWN-ERROR";
 }
 
 static char cmap[] = {

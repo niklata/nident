@@ -31,7 +31,6 @@
 #include <pwd.h>
 
 #include <nk/format.hpp>
-#include <boost/lexical_cast.hpp>
 
 #include "identclient.hpp"
 #include "parse.hpp"
@@ -174,12 +173,10 @@ bool IdentClient::create_reply()
             if (!gChrooted) {
                 struct passwd *pw = getpwuid(uid);
                 if (pw && pw->pw_dir) {
-                    path = pw->pw_dir;
-                    path += "/.ident";
+                    path = fmt::format("{}/.ident", pw->pw_dir);
                 }
             } else {
-                path = "/";
-                path += boost::lexical_cast<std::string>(uid);
+                path = fmt::format("/{}", uid);
             }
             if (path.size()) {
                 Parse pa;
@@ -191,15 +188,10 @@ bool IdentClient::create_reply()
             }
         }
         if (!gParanoid && !reply.size())
-                reply = "ERROR:HIDDEN-USER";
+            reply = "ERROR:HIDDEN-USER";
     }
 
-    outbuf_ =  boost::lexical_cast<std::string>(server_port_);
-    outbuf_ += ",";
-    outbuf_ += boost::lexical_cast<std::string>(client_port_);
-    outbuf_ += ":";
-    outbuf_ += reply;
-    outbuf_ += "\r\n";
+    outbuf_ = fmt::format("{},{}:{}\r\n", server_port_, client_port_, reply);
     write();
     if (!gflags_quiet)
         fmt::print("({},{}) {},{} uid={} -> {}\n", server_address_.to_string(),
