@@ -26,9 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <iostream>
 #include <unistd.h>
 #include "netlink.hpp"
+#include <nk/format.hpp>
 namespace ba = boost::asio;
 
 Netlink::Netlink(bool v4only) : v4only_(v4only), fd_(-1), socktype_(-1),
@@ -85,7 +85,7 @@ bool Netlink::open(int socktype)
 
     int ret = socket(AF_NETLINK, SOCK_RAW, socktype);
     if (ret < 0) {
-        std::cerr << "Netlink: socket() error: " << strerror(errno) << std::endl;
+        fmt::print(stderr, "Netlink: socket() error: {}\n", strerror(errno));
         return false;
     }
     fd_ = ret;
@@ -97,23 +97,20 @@ bool Netlink::open(int socktype)
     nladdr.nl_family = AF_NETLINK;
 
     if (bind(fd_, (struct sockaddr *)&nladdr, sizeof nladdr) < 0) {
-        std::cerr << "get_tcp_uid: bind() error: " << strerror(errno)
-                  << std::endl;
+        fmt::print(stderr, "get_tcp_uid: bind() error: {}\n", strerror(errno));
         goto fail;
     }
     if (getsockname(fd_, (struct sockaddr *)&nladdr, &nladdr_len) < 0) {
-        std::cerr << "get_tcp_uid: getsockname() error: " << strerror(errno)
-                  << std::endl;
+        fmt::print(stderr, "get_tcp_uid: getsockname() error: {}\n",
+                   strerror(errno));
         goto fail;
     }
     if (nladdr_len != sizeof nladdr) {
-        std::cerr << "get_tcp_uid: getsockname address length mismatch"
-                  << std::endl;
+        fmt::print(stderr, "get_tcp_uid: getsockname address length mismatch\n");
         goto fail;
     }
     if (nladdr.nl_family != AF_NETLINK) {
-        std::cerr << "get_tcp_uid: getsockname address type mismatch"
-                  << std::endl;
+        fmt::print(stderr, "get_tcp_uid: getsockname address type mismatch\n");
         goto fail;
     }
 
@@ -146,7 +143,7 @@ struct nlmsghdr *Netlink::nlmsg_next(const struct nlmsghdr *nlh, int &len)
 bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
 {
     if (!open(NETLINK_ROUTE)) {
-        std::cerr << "failed to create netlink socket" << std::endl;
+        fmt::print(stderr, "failed to create netlink socket\n");
         return false;
     }
 
@@ -168,8 +165,7 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
     char buf[8192];
     int rbytes = recv(fd_, buf, sizeof buf, MSG_WAITALL);
     if (rbytes < 0) {
-        std::cerr << "get_if_stats: recv() error: " << strerror(errno)
-                  << std::endl;
+        fmt::print(stderr, "get_if_stats: recv() error: {}\n", strerror(errno));
         return false;
     }
 
@@ -177,20 +173,20 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
     for (nlh = reinterpret_cast<struct nlmsghdr *>(buf);
          nlmsg_ok(nlh, rbytes); nlh = nlmsg_next(nlh, rbytes)) {
         if (nlh->nlmsg_pid != portid_) {
-            std::cerr << "get_if_stats: bad portid: "
-                      << nlh->nlmsg_pid << "!=" << portid_ << std::endl;
+            fmt::print(stderr, "get_if_stats: bad portid: {} != {}\n",
+                       nlh->nlmsg_pid, portid_);
             continue;
         }
         if (nlh->nlmsg_seq != this_seq) {
-            std::cerr << "get_if_stats: bad seq: " << nlh->nlmsg_seq
-                      << " != " << this_seq << std::endl;
+            fmt::print(stderr, "get_if_stats: bad seq: {} != {}\n",
+                       nlh->nlmsg_seq, this_seq);
             continue;
         }
 
         if (nlh->nlmsg_type == NLMSG_DONE)
             break;
         if (nlh->nlmsg_type == NLMSG_ERROR) {
-            std::cerr << "get_if_stats: received NLMSG_ERROR reply" << std::endl;
+            fmt::print(stderr, "get_if_stats: received NLMSG_ERROR reply\n");
             break;
         }
 
@@ -239,7 +235,8 @@ static bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address_v4 &v, bo
 {
     if (a.is_v4()) {
         if (a != v) {
-            std::cout << "v4_addreq: " << (src?"src":"dst") << " addresses do not match - a/v4 [" << a << "] != v/v4 [" << v << "]\n";
+            fmt::print("v4_addreq: {} addresses do not match - a/v4 [{}] != v/v4 [{}]\n",
+                       src?"src":"dst", a, v);
             return false;
         }
         return true;
@@ -254,11 +251,13 @@ static bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address_v4 &v, bo
         } catch (const std::bad_cast &) { goto fail; }
         if (a4 == v)
             return true;
-        std::cout << "v4_addreq: " << (src?"src":"dst") << " addresses do not match - a/v6" << (a6mapped?"m":"c") << " [" << a << "] != v/v4 [" << v << "]\n";
+        fmt::print("v4_addreq: {} addresses do not match - a/v6{} [{}] != v/v4 [{}]\n",
+                   src?"src":"dst", a6mapped?"m":"c", a, v);
         return false;
     }
 fail:
-    std::cout << "v4_addreq: " << (src?"src":"dst") << " addresses do not match - a/v6 [" << a << "] != v/v4 [" << v << "]\n";
+    fmt::print("v4_addreq: {} addresses do not match - a/v6 [{}] != v/v4 [{}]\n",
+               src?"src":"dst", a, v);
     return false;
 }
 
@@ -280,16 +279,19 @@ static bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address_v6 &v, bo
                 } catch (const std::bad_cast &) { goto fail2; }
                 if (a4 == v4)
                     return true;
-                std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v4" << (amapped?"m":"c") << " [" << a << "] != v/v4" << (vmapped?"m":"c") << " [" << v << "]\n";
+                fmt::print("v6_addreq: {} addresses do not match - a/v4{} [{}] != v/v4{} [{}]\n",
+                           src?"src":"dst", amapped?"m":"c", a, vmapped?"m":"c", v);
                 return false;
             }
 fail2:
-            std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v4" << (amapped?"m":"c") << " [" << a << "] != v/v4 [" << v << "]\n";
+            fmt::print("v6_addreq: {} addresses do not match - a/v4{} [{}] != v/v4 [{}]\n",
+                       src?"src":"dst", amapped?"m":"c", a, v);
             return false;
         }
 normal_test:
         if (a != v) {
-            std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v6 [" << a << "] != v/v6 [" << v << "]\n";
+            fmt::print("v6_addreq: {}"" addresses do not match - a/v6 [{}] != v/v6 [{}]\n",
+                       src?"src":"dst", a, v);
             return false;
         }
         return true;
@@ -302,11 +304,13 @@ normal_test:
         } catch (const std::bad_cast &) { goto fail; }
         if (a == v4)
             return true;
-        std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v4 [" << a << "] != v/v6" << (vmapped?"m":"c") << " [" << v << "]\n";
+        fmt::print("v6_addreq: {} addresses do not match - a/v4 [{}] != v/v6{} [{}]\n",
+                   src?"src":"dst", a, vmapped?"m":"c", v);
         return false;
     }
 fail:
-    std::cout << "v6_addreq: " << (src?"src":"dst") << " addresses do not match - a/v4 [" << a << "] != v/v6 [" << v << "]\n";
+    fmt::print("v6_addreq: {} addresses do not match - a/v4 [{}] != v/v6 [{}]\n",
+               src?"src":"dst", a, v);
     return false;
 }
 
@@ -323,7 +327,7 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     int uid = -1;
 
     if (!open(NETLINK_INET_DIAG)) {
-        std::cerr << "failed to create netlink socket" << std::endl;
+        fmt::print(stderr, "failed to create netlink socket\n");
         return uid;
     }
 
@@ -373,8 +377,8 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     msg.msg_iovlen = 3;
 
     if (sendmsg(fd_, &msg, 0) < 0) {
-        std::cerr << "get_tcp_uid: sendmsg() error: " << strerror(errno)
-                  << std::endl;
+        fmt::print(stderr, "get_tcp_uid: sendmsg() error: {}\n",
+                   strerror(errno));
         return uid;
     }
 
@@ -386,8 +390,8 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
 
     int rbytes = recvmsg(fd_, &msg, MSG_WAITALL);
     if (rbytes < 0) {
-        std::cerr << "get_tcp_uid: recvmsg() error: " << strerror(errno)
-                  << std::endl;
+        fmt::print(stderr, "get_tcp_uid: recvmsg() error: {}\n",
+                   strerror(errno));
         return uid;
     }
 
@@ -395,20 +399,20 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
     for (nlh = reinterpret_cast<struct nlmsghdr *>(buf);
          nlmsg_ok(nlh, rbytes); nlh = nlmsg_next(nlh, rbytes)) {
         if (nlh->nlmsg_pid != portid_) {
-            std::cerr << "get_tcp_uid: bad portid: "
-                      << nlh->nlmsg_pid << "!=" << portid_ << std::endl;
+            fmt::print(stderr, "get_tcp_uid: bad portid: {} != {}\n",
+                       nlh->nlmsg_pid, portid_);
             continue;
         }
         if (nlh->nlmsg_seq != this_seq) {
-            std::cerr << "get_tcp_uid: bad seq: " << nlh->nlmsg_seq
-                      << " != " << this_seq << std::endl;
+            fmt::print(stderr, "get_tcp_uid: bad seq: {} != {}\n",
+                       nlh->nlmsg_seq, this_seq);
             continue;
         }
 
         if (nlh->nlmsg_type == NLMSG_DONE)
             break;
         if (nlh->nlmsg_type == NLMSG_ERROR) {
-            std::cerr << "get_tcp_uid: received NLMSG_ERROR reply" << std::endl;
+            fmt::print(stderr, "get_tcp_uid: received NLMSG_ERROR reply\n");
             break;
         }
 
@@ -418,7 +422,8 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
             unsigned short sport = ntohs(r->id.idiag_sport);
             unsigned short dport = ntohs(r->id.idiag_dport);
             if (sport != sp || dport != dp) {
-                std::cerr << "get_tcp_uid: ports (sp,dp)=(" << sp << "," << dp << ") != (" << sport << "," << dport << ")" << std::endl;
+                fmt::print(stderr, "get_tcp_uid: ports (sp,dp)=({},{}) != ({},{})\n",
+                           sp, dp, sport, dport);
                 continue;
             }
 

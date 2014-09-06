@@ -52,6 +52,7 @@
 #include <errno.h>
 #include <getopt.h>
 
+#include <nk/format.hpp>
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
 
@@ -61,7 +62,6 @@
 #include "make_unique.hpp"
 
 extern "C" {
-#include "nk/log.h"
 #include "nk/privilege.h"
 #include "nk/pidfile.h"
 #include "nk/seccomp-bpf.h"
@@ -82,7 +82,8 @@ uint64_t gSaltK0 = SALTC1, gSaltK1 = SALTC2;
 static uid_t nident_uid;
 static gid_t nident_gid;
 static bool v4only = false;
-
+static int gflags_detach;
+extern int gflags_quiet;
 
 static void process_signals()
 {
@@ -95,8 +96,10 @@ static void process_signals()
     sigaddset(&mask, SIGTSTP);
     sigaddset(&mask, SIGTTIN);
     sigaddset(&mask, SIGHUP);
-    if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0)
-        suicide("sigprocmask failed");
+    if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0) {
+        fmt::print(stderr, "sigprocmask failed\n");
+        std::quick_exit(EXIT_FAILURE);
+    }
     asio_signal_set.add(SIGINT);
     asio_signal_set.add(SIGTERM);
     asio_signal_set.async_wait(
@@ -171,7 +174,7 @@ static int enforce_seccomp(void)
         return -1;
     if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog))
         return -1;
-    log_line("seccomp filter installed.  Please disable seccomp if you encounter problems.");
+    fmt::print("seccomp filter installed.  Please disable seccomp if you encounter problems.\n");
     return 0;
 }
 
@@ -221,14 +224,14 @@ static po::variables_map fetch_options(int ac, char *av[])
         po::store(po::command_line_parser(ac, av).
                   options(cmdline_options).positional(p).run(), vm);
     } catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
+        fmt::print(stderr, "{}\n", e.what());
     }
     po::notify(vm);
 
     if (config_file.size()) {
         std::ifstream ifs(config_file.c_str());
         if (!ifs) {
-            std::cerr << "Could not open config file: " << config_file << "\n";
+            fmt::print(stderr, "Could not open config file: {}\n", config_file);
             std::exit(EXIT_FAILURE);
         }
         po::store(po::parse_config_file(ifs, cfgfile_options), vm);
@@ -236,15 +239,14 @@ static po::variables_map fetch_options(int ac, char *av[])
     }
 
     if (vm.count("help")) {
-        std::cout << "nident " << NIDENT_VERSION << ", ident server.\n"
-                  << "Copyright (c) 2010-2013 Nicholas J. Kain\n"
-                  << av[0] << " [options] addresses...\n"
-                  << gopts << std::endl;
+        fmt::print("nident " NIDENT_VERSION ", ident server.\n"
+                  "Copyright (c) 2010-2013 Nicholas J. Kain\n"
+                  "{} [options] addresses...\n{}\n", av[0], gopts);
         std::exit(EXIT_FAILURE);
     }
     if (vm.count("version")) {
-        std::cout << "nident " << NIDENT_VERSION << ", ident server.\n" <<
-            "Copyright (c) 2010-2013 Nicholas J. Kain\n"
+        fmt::print("nident " NIDENT_VERSION ", ident server.\n"
+            "Copyright (c) 2010-2014 Nicholas J. Kain\n"
             "All rights reserved.\n\n"
             "Redistribution and use in source and binary forms, with or without\n"
             "modification, are permitted provided that the following conditions are met:\n\n"
@@ -263,7 +265,7 @@ static po::variables_map fetch_options(int ac, char *av[])
             "INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN\n"
             "CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)\n"
             "ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE\n"
-            "POSSIBILITY OF SUCH DAMAGE.\n";
+            "POSSIBILITY OF SUCH DAMAGE.\n");
         std::exit(EXIT_FAILURE);
     }
     return vm;
@@ -300,8 +302,10 @@ static void process_options(int ac, char *av[])
         addrlist = vm["address"].as<std::vector<std::string> >();
     if (vm.count("user")) {
         auto t = vm["user"].as<std::string>();
-        if (nk_uidgidbyname(t.c_str(), &nident_uid, &nident_gid))
-            suicide("invalid user '%s' specified", t.c_str());
+        if (nk_uidgidbyname(t.c_str(), &nident_uid, &nident_gid)) {
+            fmt::print(stderr, "invalid user '{}' specified\n", t);
+            std::exit(EXIT_FAILURE);
+        }
     }
     if (vm.count("salt")) {
         auto sst = vm["salt"].as<std::string>();
@@ -325,8 +329,8 @@ static void process_options(int ac, char *av[])
                 try {
                     port = boost::lexical_cast<unsigned short>(pstr);
                 } catch (const boost::bad_lexical_cast&) {
-                    std::cout << "bad port in address '" << addr
-                              << "', defaulting to 113" << std::endl;
+                    fmt::print("bad port in address '{}', defaulting to 113\n",
+                               addr);
                 }
                 addr.erase(loc);
             }
@@ -335,13 +339,16 @@ static void process_options(int ac, char *av[])
                 auto ep = boost::asio::ip::tcp::endpoint(addy, port);
                 listeners.emplace_back(nk::make_unique<ClientListener>(ep));
             } catch (const boost::system::error_code&) {
-                std::cout << "bad address: " << addr << std::endl;
+                fmt::print("bad address: {}", addr);
             }
         }
 
-    if (gflags_detach)
-        if (daemon(0,0))
-            suicide("detaching fork failed");
+    if (gflags_detach) {
+        if (daemon(0,0)) {
+            fmt::print(stderr, "detaching fork failed\n");
+            std::exit(EXIT_FAILURE);
+        }
+    }
 
     if (pidfile.size() && file_exists(pidfile.c_str(), "w"))
         write_pid(pidfile.c_str());
@@ -351,8 +358,10 @@ static void process_options(int ac, char *av[])
     nk_fix_env(nident_uid, 0);
 
     nlink = nk::make_unique<Netlink>(v4only);
-    if (!nlink->open(NETLINK_INET_DIAG))
-        suicide("failed to create netlink socket");
+    if (!nlink->open(NETLINK_INET_DIAG)) {
+        fmt::print(stderr, "failed to create netlink socket\n");
+        std::exit(EXIT_FAILURE);
+    }
 
     if (chroot_path.size()) {
         nk_set_chroot(chroot_path.c_str());
@@ -363,14 +372,12 @@ static void process_options(int ac, char *av[])
         nk_set_uidgid(nident_uid, nident_gid, NULL, 0);
     if (use_seccomp) {
         if (enforce_seccomp())
-            log_warning("seccomp filter cannot be installed");
+            fmt::print(stderr, "seccomp filter cannot be installed\n");
     }
 }
 
 int main(int ac, char *av[])
 {
-    gflags_log_name = const_cast<char *>("nident");
-
     process_options(ac, av);
 
     io_service.run();

@@ -23,8 +23,11 @@ else()
   return()
 endif()
 
-include_directories("${PROJECT_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/ncmlib")
+include_directories("${PROJECT_SOURCE_DIR}"
+                    "${PROJECT_SOURCE_DIR}/ncmlib"
+                    "${PROJECT_SOURCE_DIR}/cppformat")
 add_subdirectory(ncmlib)
+add_subdirectory(cppformat)
 
 find_package( Boost COMPONENTS system program_options )
 link_directories ( ${Boost_LIBRARY_DIRS} )
@@ -75,11 +78,12 @@ set(PTEST_SRCS
 
 add_executable(nident ${RAGEL_IDENTPARSE} ${RAGEL_PARSECFG} ${NIDENT_SRCS})
 target_link_libraries(nident ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
-                             ncmlib)
+                             ncmlib cppformat)
 
 add_executable(nl-test ${NLTEST_SRCS})
-target_link_libraries(nl-test ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES})
+target_link_libraries(nl-test ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
+                              cppformat)
 
 add_executable(parsetest ${RAGEL_PARSECFG} ${PTEST_SRCS})
 target_link_libraries(parsetest ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
-                                ncmlib)
+                                ncmlib cppformat)

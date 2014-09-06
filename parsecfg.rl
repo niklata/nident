@@ -32,12 +32,9 @@
 #include <fstream>
 #include <stdint.h>
 #include <pwd.h>
+#include <nk/format.hpp>
 
 #include "asio_addrcmp.hpp"
-
-extern "C" {
-#include "nk/log.h"
-}
 
 namespace ba = boost::asio;
 
@@ -121,7 +118,7 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
     std::ifstream f(fn, std::ifstream::in);
 
     if (f.fail() || f.bad() || f.eof()) {
-        log_line("Parse - failed to open file: '%s'", fn.c_str());
+        fmt::print(stderr, "Parse - failed to open file: '{}'\n", fn);
         goto out;
     }
 
@@ -130,10 +127,10 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
         if (f.eof()) {
             break;
         } else if (f.bad()) {
-            log_line("Parse - fatal io error fetching line of '%s'", fn.c_str());
+            fmt::print(stderr, "Parse - fatal io error fetching line of '{}'\n", fn);
             break;
         } else if (f.fail()) {
-            log_line("Parse - non-fatal io error fetching line of '%s'", fn.c_str());
+            fmt::print(stderr, "Parse - non-fatal io error fetching line of '{}'\n", fn);
             break;
         }
 
@@ -152,7 +149,7 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
             %% write init;
             %% write exec;
         } catch (const boost::system::error_code &ec) {
-            log_line("Parse - bad host string: '%s'", hoststr.c_str());
+            fmt::print(stderr, "Parse - bad host string: '{}'\n", hoststr);
             continue; // invalid
         }
 

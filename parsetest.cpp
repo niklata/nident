@@ -1,4 +1,4 @@
-#include <iostream>
+#include <nk/format.hpp>
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 #include <boost/asio.hpp>
@@ -14,7 +14,7 @@ uint64_t gSaltK0 = SALTC1, gSaltK1 = SALTC2;
 int main(int argc, const char *argv[])
 {
     std::string sastr, dastr;
-    unsigned short sp, dp;
+    unsigned short sp = 0, dp = 0;
     std::string reply;
 
     po::options_description desc("Allowed options");
@@ -37,7 +37,7 @@ int main(int argc, const char *argv[])
         po::store(po::command_line_parser(argc, argv).
                   options(desc).positional(p).run(), vm);
     } catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
+        fmt::print(stderr, "{}\n", e.what());
     }
     po::notify(vm);
 
@@ -56,49 +56,48 @@ int main(int argc, const char *argv[])
                                      sst.c_str(), sst.size());
     }
     if (!sastr.size()) {
-        std::cerr << "no source address specified\n";
+        fmt::print(stderr, "no source address specified\n");
         return -1;
     }
     if (!sp) {
-        std::cerr << "no source port specified\n";
+        fmt::print(stderr, "no source port specified\n");
         return -1;
     }
     if (!dastr.size()) {
-        std::cerr << "no destination address specified\n";
+        fmt::print(stderr, "no destination address specified\n");
         return -1;
     }
     if (!dp) {
-        std::cerr << "no destination port specified\n";
+        fmt::print(stderr, "no destination port specified\n");
         return -1;
     }
 
-    std::cout << "src: " << sastr << ":" << sp << " dst: " << dastr << ":" << dp
-              << std::endl;
+    fmt::print("src: {}:{} dst: {}:{}\n" , sastr, sp, dastr, dp);
 
     ba::ip::address sa, da;
     try {
         sa = ba::ip::address::from_string(sastr);
     } catch (const std::exception&) {
-        std::cerr << "invalid source ip address\n";
+        fmt::print(stderr, "invalid source ip address\n");
         return -1;
     }
     try {
         da = ba::ip::address::from_string(dastr);
     } catch (const std::exception&) {
-        std::cerr << "invalid destination ip address\n";
+        fmt::print(stderr, "invalid destination ip address\n");
         return -1;
     }
 
     Netlink nl;
     int uid = nl.get_tcp_uid(sa, sp, da, dp);
     if (uid >= 0) {
-        std::cout << "uid: " << uid << std::endl;
+        fmt::print("uid: {}\n", uid);
     }
 
     //"2001:470:e2b4::1 53199 2600:3c01::f03c:91ff:fe96:8625 6697"
     Parse pa;
     if (pa.parse_cfg("/var/lib/ident/" + std::to_string(uid), sa, sp, da, dp))
         reply = pa.get_response(sa, sp, da, dp, uid);
-    std::cout << "reply: " << reply << "\n";
+    fmt::print("reply: {}\n", reply);
     return 0;
 }

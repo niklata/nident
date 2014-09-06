@@ -30,14 +30,11 @@
 #include "siphash.hpp"
 
 #include <string.h>
+#include <nk/format.hpp>
 #include <boost/lexical_cast.hpp>
 #include <fstream>
 #include <stdint.h>
 #include <pwd.h>
-
-extern "C" {
-#include "nk/log.h"
-}
 
 namespace ba = boost::asio;
 
@@ -63,8 +60,8 @@ std::string Parse::get_response(ba::ip::address sa, int sp,
             ret += ci_.policy.spoof;
         } else {
             // A username exists with the spoof name.
-            log_line("Spoof requested for extant user %s",
-                     ci_.policy.spoof.c_str());
+            fmt::print(stderr, "Spoof requested for extant user {}\n",
+                       ci_.policy.spoof);
             if (gParanoid)
                 ret = "ERROR:UNKNOWN-ERROR";
             else

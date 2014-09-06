@@ -26,21 +26,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <iostream>
-
 #include <unistd.h>
 #include <sys/types.h>
 #include <pwd.h>
 
+#include <nk/format.hpp>
 #include <boost/lexical_cast.hpp>
 
 #include "identclient.hpp"
 #include "parse.hpp"
 #include "netlink.hpp"
-
-extern "C" {
-#include "nk/log.h"
-}
 
 namespace ba = boost::asio;
 
@@ -48,6 +43,7 @@ extern ba::io_service io_service;
 extern Netlink *nlink;
 extern bool gParanoid;
 extern bool gChrooted;
+extern int gflags_quiet;
 
 unsigned int max_client_bytes = 128;
 
@@ -65,9 +61,8 @@ void IdentClient::do_read()
                      std::size_t bytes_xferred)
          {
              if (state_ != STATE_DONE && ec) {
-                 std::cerr << "Client read error: "
-                           << boost::system::system_error(ec).what()
-                           << std::endl;
+                 fmt::print(stderr, "Client read error: {}\n",
+                            boost::system::system_error(ec).what());
                  return;
              }
              if (!bytes_xferred)
@@ -96,9 +91,8 @@ void IdentClient::do_write()
         {
             writePending_ = false;
             if (ec) {
-                std::cerr << "Client write error: "
-                          << boost::system::system_error(ec).what()
-                          << std::endl;
+                fmt::print(stderr, "Client write error: {}\n",
+                           boost::system::system_error(ec).what());
                 return;
             }
             outbuf_.erase(0, bytes_xferred);
@@ -167,7 +161,7 @@ bool IdentClient::create_reply()
     } else if (ps == ParseBadPort) {
         reply = "ERROR:INVALID-PORT";
     } else if (ps == ParseServerPort || ps == ParseClientPort) {
-        log_line("Request parse incomplete: should never happen.");
+        fmt::print(stderr, "Request parse incomplete: should never happen.\n");
         return false;
     } else {
         uid = nlink->get_tcp_uid(server_address_, server_port_,
@@ -207,9 +201,10 @@ bool IdentClient::create_reply()
     outbuf_ += reply;
     outbuf_ += "\r\n";
     write();
-    log_line("(%s,%s) %d,%d uid=%d -> %s", server_address_.to_string().c_str(),
-             client_address_.to_string().c_str(),
-             server_port_, client_port_, uid, reply.c_str());
+    if (!gflags_quiet)
+        fmt::print("({},{}) {},{} uid={} -> {}\n", server_address_.to_string(),
+                   client_address_.to_string(), server_port_, client_port_,
+                   uid, reply);
     return true;
 }
 

@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <iostream>
+#include <nk/format.hpp>
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 #include "netlink.hpp"
@@ -35,7 +35,7 @@ namespace ba = boost::asio;
 int main(int argc, const char *argv[])
 {
     std::string sastr, dastr;
-    unsigned short sp, dp;
+    unsigned short sp = 0, dp = 0;
 
     po::options_description desc("Allowed options");
     desc.add_options()
@@ -57,7 +57,7 @@ int main(int argc, const char *argv[])
         po::store(po::command_line_parser(argc, argv).
                   options(desc).positional(p).run(), vm);
     } catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
+        fmt::print(stderr, "{}\n", e.what());
     }
     po::notify(vm);
 
@@ -66,7 +66,7 @@ int main(int argc, const char *argv[])
         Netlink nl;
         size_t rx = 0, tx = 0;
         if (nl.get_if_stats(ifname, &rx, &tx)) {
-            std::cout << "rx: " << rx << " tx: " << tx << std::endl;
+            fmt::print("rx: {} tx: {}\n", rx, tx);
             exit(EXIT_SUCCESS);
         }
         exit(EXIT_FAILURE);
@@ -82,24 +82,23 @@ int main(int argc, const char *argv[])
         dp = vm["dp"].as<unsigned short>();
 
     if (!sastr.size()) {
-        std::cerr << "no source address specified\n";
+        fmt::print(stderr, "no source address specified\n");
         return -1;
     }
     if (!sp) {
-        std::cerr << "no source port specified\n";
+        fmt::print(stderr, "no source port specified\n");
         return -1;
     }
     if (!dastr.size()) {
-        std::cerr << "no destination address specified\n";
+        fmt::print(stderr, "no destination address specified\n");
         return -1;
     }
     if (!dp) {
-        std::cerr << "no destination port specified\n";
+        fmt::print(stderr, "no destination port specified\n");
         return -1;
     }
 
-    std::cout << "src: " << sastr << ":" << sp << " dst: " << dastr << ":" << dp
-              << std::endl;
+    fmt::print("src: {}:{} dst: {}:{}\n", sastr, sp, dastr, dp);
 
     ba::ip::address sa = ba::ip::address::from_string(sastr);
     ba::ip::address da = ba::ip::address::from_string(dastr);
@@ -107,7 +106,7 @@ int main(int argc, const char *argv[])
     Netlink nl;
     int uid = nl.get_tcp_uid(sa, sp, da, dp);
     if (uid >= 0) {
-        std::cout << "uid: " << uid << std::endl;
+        fmt::print("uid: {}\n", uid);
         return 0;
     }
     return -1;
