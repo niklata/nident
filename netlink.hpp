@@ -42,7 +42,13 @@ public:
     bool open(int socktype);
     int get_tcp_uid(boost::asio::ip::address sa, unsigned short sp,
                     boost::asio::ip::address da, unsigned short dp);
-    bool get_if_stats(const std::string &ifname, size_t *rx, size_t *tx);
+    struct IfStats {
+        IfStats(const std::string &n) : name(n), rx(0), tx(0) {}
+        const std::string name;
+        size_t rx;
+        size_t tx;
+    };
+    bool get_if_stats(std::vector<IfStats> &ifs);
 private:
     bool nlmsg_ok(const struct nlmsghdr *nlh, size_t len) const;
     struct nlmsghdr *nlmsg_next(const struct nlmsghdr *nlh, int &len);

@@ -140,11 +140,12 @@ struct nlmsghdr *Netlink::nlmsg_next(const struct nlmsghdr *nlh, int &len)
 }
 
 #define NLK_RTM_NL_DATAMAX (sizeof(struct rtnl_link_stats)/sizeof(uint32_t))
-bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
+bool Netlink::get_if_stats(std::vector<IfStats> &ifs)
 {
+    bool ret(false);
     if (!open(NETLINK_ROUTE)) {
         fmt::print(stderr, "failed to create netlink socket\n");
-        return false;
+        return ret;
     }
 
     struct nlmsghdr *nlh;
@@ -166,7 +167,7 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
     int rbytes = recv(fd_, buf, sizeof buf, MSG_WAITALL);
     if (rbytes < 0) {
         fmt::print(stderr, "get_if_stats: recv() error: {}\n", strerror(errno));
-        return false;
+        return ret;
     }
 
   again:
@@ -183,8 +184,10 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
             continue;
         }
 
-        if (nlh->nlmsg_type == NLMSG_DONE)
+        if (nlh->nlmsg_type == NLMSG_DONE) {
+            ret = true;
             break;
+        }
         if (nlh->nlmsg_type == NLMSG_ERROR) {
             fmt::print(stderr, "get_if_stats: received NLMSG_ERROR reply\n");
             break;
@@ -212,22 +215,21 @@ bool Netlink::get_if_stats(const std::string &ifname, size_t *rx, size_t *tx)
 
             // Skip if the interface name doesn't match.
             std::string name((char *)RTA_DATA(tb[IFLA_IFNAME]));
-            if (ifname != name)
-                continue;
-
-            // idx: 0 = rxpkts, 1 = txpkts, 2 = rxbytes, 3 = txbytes
-            uint32_t ival[NLK_RTM_NL_DATAMAX] = {};
-            memcpy(ival, RTA_DATA(tb[IFLA_STATS]), sizeof ival);
-            *rx = ival[2];
-            *tx = ival[3];
-
-            while (recv(fd_, buf, sizeof buf, MSG_DONTWAIT) >= 0);
-            return true;
+            for (auto &i: ifs) {
+                if (i.name == name) {
+                    // idx: 0 = rxpkts, 1 = txpkts, 2 = rxbytes, 3 = txbytes
+                    uint32_t ival[NLK_RTM_NL_DATAMAX] = {};
+                    memcpy(ival, RTA_DATA(tb[IFLA_STATS]), sizeof ival);
+                    i.rx = ival[2];
+                    i.tx = ival[3];
+                    break;
+                }
+            }
         }
     }
     if ((rbytes = recv(fd_, buf, sizeof buf, MSG_DONTWAIT)) >= 0)
         goto again;
-    return false;
+    return ret;
 }
 
 // v6 -> v4 is VALID IIF v6ismapped|v6iscompat
