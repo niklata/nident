@@ -62,11 +62,11 @@ int main(int argc, const char *argv[])
     po::notify(vm);
 
     if (vm.count("rates")) {
-        std::string ifname = vm["rates"].as<std::string>();
         Netlink nl;
-        size_t rx = 0, tx = 0;
-        if (nl.get_if_stats(ifname, &rx, &tx)) {
-            fmt::print("rx: {} tx: {}\n", rx, tx);
+        std::vector<Netlink::IfStats> ifs;
+        ifs.emplace_back(vm["rates"].as<std::string>());
+        if (nl.get_if_stats(ifs)) {
+            fmt::print("rx: {} tx: {}\n", ifs[0].rx, ifs[0].tx);
             exit(EXIT_SUCCESS);
         }
         exit(EXIT_FAILURE);
