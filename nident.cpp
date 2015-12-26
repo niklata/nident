@@ -59,7 +59,6 @@
 #include "identclient.hpp"
 #include "netlink.hpp"
 #include "siphash.hpp"
-#include "make_unique.hpp"
 
 extern "C" {
 #include "nk/privilege.h"
@@ -319,7 +318,7 @@ static void process_options(int ac, char *av[])
 
     if (!addrlist.size()) {
         auto ep = boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v6(), 113);
-        listeners.emplace_back(nk::make_unique<ClientListener>(ep));
+        listeners.emplace_back(std::make_unique<ClientListener>(ep));
     } else
         for (const auto &i: addrlist) {
             std::string addr(i);
@@ -338,7 +337,7 @@ static void process_options(int ac, char *av[])
             try {
                 auto addy = boost::asio::ip::address::from_string(addr);
                 auto ep = boost::asio::ip::tcp::endpoint(addy, port);
-                listeners.emplace_back(nk::make_unique<ClientListener>(ep));
+                listeners.emplace_back(std::make_unique<ClientListener>(ep));
             } catch (const boost::system::error_code&) {
                 fmt::print("bad address: {}", addr);
             }
@@ -358,7 +357,7 @@ static void process_options(int ac, char *av[])
     process_signals();
     nk_fix_env(nident_uid, 0);
 
-    nlink = nk::make_unique<Netlink>(v4only);
+    nlink = std::make_unique<Netlink>(v4only);
     if (!nlink->open(NETLINK_INET_DIAG)) {
         fmt::print(stderr, "failed to create netlink socket\n");
         std::exit(EXIT_FAILURE);
