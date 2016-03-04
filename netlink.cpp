@@ -237,7 +237,7 @@ static bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address_v4 &v, bo
 {
     if (a.is_v4()) {
         if (a != v) {
-            fmt::print("v4_addreq: {} addresses do not match - a/v4 [{}] != v/v4 [{}]\n",
+            fmt::print(stderr, "v4_addreq: {} addresses do not match - a/v4 [{}] != v/v4 [{}]\n",
                        src?"src":"dst", a, v);
             return false;
         }
@@ -253,12 +253,12 @@ static bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address_v4 &v, bo
         } catch (const std::bad_cast &) { goto fail; }
         if (a4 == v)
             return true;
-        fmt::print("v4_addreq: {} addresses do not match - a/v6{} [{}] != v/v4 [{}]\n",
+        fmt::print(stderr, "v4_addreq: {} addresses do not match - a/v6{} [{}] != v/v4 [{}]\n",
                    src?"src":"dst", a6mapped?"m":"c", a, v);
         return false;
     }
 fail:
-    fmt::print("v4_addreq: {} addresses do not match - a/v6 [{}] != v/v4 [{}]\n",
+    fmt::print(stderr, "v4_addreq: {} addresses do not match - a/v6 [{}] != v/v4 [{}]\n",
                src?"src":"dst", a, v);
     return false;
 }
@@ -281,18 +281,18 @@ static bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address_v6 &v, bo
                 } catch (const std::bad_cast &) { goto fail2; }
                 if (a4 == v4)
                     return true;
-                fmt::print("v6_addreq: {} addresses do not match - a/v4{} [{}] != v/v4{} [{}]\n",
+                fmt::print(stderr, "v6_addreq: {} addresses do not match - a/v4{} [{}] != v/v4{} [{}]\n",
                            src?"src":"dst", amapped?"m":"c", a, vmapped?"m":"c", v);
                 return false;
             }
 fail2:
-            fmt::print("v6_addreq: {} addresses do not match - a/v4{} [{}] != v/v4 [{}]\n",
+            fmt::print(stderr, "v6_addreq: {} addresses do not match - a/v4{} [{}] != v/v4 [{}]\n",
                        src?"src":"dst", amapped?"m":"c", a, v);
             return false;
         }
 normal_test:
         if (a != v) {
-            fmt::print("v6_addreq: {}"" addresses do not match - a/v6 [{}] != v/v6 [{}]\n",
+            fmt::print(stderr, "v6_addreq: {}"" addresses do not match - a/v6 [{}] != v/v6 [{}]\n",
                        src?"src":"dst", a, v);
             return false;
         }
@@ -306,12 +306,12 @@ normal_test:
         } catch (const std::bad_cast &) { goto fail; }
         if (a == v4)
             return true;
-        fmt::print("v6_addreq: {} addresses do not match - a/v4 [{}] != v/v6{} [{}]\n",
+        fmt::print(stderr, "v6_addreq: {} addresses do not match - a/v4 [{}] != v/v6{} [{}]\n",
                    src?"src":"dst", a, vmapped?"m":"c", v);
         return false;
     }
 fail:
-    fmt::print("v6_addreq: {} addresses do not match - a/v4 [{}] != v/v6 [{}]\n",
+    fmt::print(stderr, "v6_addreq: {} addresses do not match - a/v4 [{}] != v/v6 [{}]\n",
                src?"src":"dst", a, v);
     return false;
 }

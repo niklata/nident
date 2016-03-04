@@ -193,10 +193,12 @@ bool IdentClient::create_reply()
 
     outbuf_ = fmt::format("{},{}:{}\r\n", server_port_, client_port_, reply);
     write();
-    if (!gflags_quiet)
+    if (!gflags_quiet) {
         fmt::print("({},{}) {},{} uid={} -> {}\n", server_address_.to_string(),
                    client_address_.to_string(), server_port_, client_port_,
                    uid, reply);
+        std::fflush(stdout);
+    }
     return true;
 }
 

@@ -175,6 +175,7 @@ static int enforce_seccomp(void)
     if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog))
         return -1;
     fmt::print("seccomp filter installed.  Please disable seccomp if you encounter problems.\n");
+    std::fflush(stdout);
     return 0;
 }
 
@@ -240,13 +241,13 @@ static po::variables_map fetch_options(int ac, char *av[])
 
     if (vm.count("help")) {
         fmt::print("nident " NIDENT_VERSION ", ident server.\n"
-                  "Copyright (c) 2010-2013 Nicholas J. Kain\n"
+                  "Copyright (c) 2010-2016 Nicholas J. Kain\n"
                   "{} [options] addresses...\n{}\n", av[0], gopts);
         std::exit(EXIT_FAILURE);
     }
     if (vm.count("version")) {
         fmt::print("nident " NIDENT_VERSION ", ident server.\n"
-            "Copyright (c) 2010-2014 Nicholas J. Kain\n"
+            "Copyright (c) 2010-2016 Nicholas J. Kain\n"
             "All rights reserved.\n\n"
             "Redistribution and use in source and binary forms, with or without\n"
             "modification, are permitted provided that the following conditions are met:\n\n"
@@ -329,7 +330,7 @@ static void process_options(int ac, char *av[])
                 try {
                     port = boost::lexical_cast<unsigned short>(pstr);
                 } catch (const boost::bad_lexical_cast&) {
-                    fmt::print("bad port in address '{}', defaulting to 113\n",
+                    fmt::print(stderr, "bad port in address '{}', defaulting to 113\n",
                                addr);
                 }
                 addr.erase(loc);
@@ -339,7 +340,7 @@ static void process_options(int ac, char *av[])
                 auto ep = boost::asio::ip::tcp::endpoint(addy, port);
                 listeners.emplace_back(std::make_unique<ClientListener>(ep));
             } catch (const boost::system::error_code&) {
-                fmt::print("bad address: {}", addr);
+                fmt::print(stderr, "bad address: {}", addr);
             }
         }
 
