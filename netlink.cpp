@@ -1,6 +1,6 @@
 /* netlink.cpp - netlink abstraction
  *
- * (c) 2011-2014 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2011-2016 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -194,8 +194,8 @@ bool Netlink::get_if_stats(std::vector<IfStats> &ifs)
         }
 
         if (nlh->nlmsg_type == RTM_NEWLINK) {
-            struct ifinfomsg *ifi = (struct ifinfomsg *)NLMSG_DATA(nlh);
-            struct rtattr *tb[IFLA_MAX+1] = {};
+            const struct ifinfomsg * const ifi = (struct ifinfomsg *)NLMSG_DATA(nlh);
+            const struct rtattr *tb[IFLA_MAX+1] = {};
 
             // See if interface is down.
             if (!(ifi->ifi_flags & IFF_UP))
@@ -214,7 +214,7 @@ bool Netlink::get_if_stats(std::vector<IfStats> &ifs)
                 continue;
 
             // Skip if the interface name doesn't match.
-            std::string name((char *)RTA_DATA(tb[IFLA_IFNAME]));
+            const auto name((const char * const)RTA_DATA(tb[IFLA_IFNAME]));
             for (auto &i: ifs) {
                 if (i.name == name) {
                     // idx: 0 = rxpkts, 1 = txpkts, 2 = rxbytes, 3 = txbytes
