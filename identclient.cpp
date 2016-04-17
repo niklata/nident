@@ -126,7 +126,7 @@ bool IdentClient::process_input()
     if (inbuf_.size() > max_client_bytes)
         return false;
 
-    size_t loc = inbuf_.find_first_of("\r\n");
+    size_t loc = inbuf_.find('\n');
     if (loc != std::string::npos) {
         inbuf_.erase(loc);
         state_ = STATE_GOTIN;
