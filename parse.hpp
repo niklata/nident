@@ -32,9 +32,8 @@
 
 #include <string>
 #include <boost/asio.hpp>
-#include <boost/utility.hpp>
 
-class Parse : boost::noncopyable
+class Parse
 {
 public:
     enum PolicyAction {
@@ -80,6 +79,8 @@ public:
     Parse() {
         found_ci_ = false;
     }
+    Parse(const Parse &) = delete;
+    Parse& operator=(const Parse &) = delete;
     std::string get_response(boost::asio::ip::address sa, int sp,
                              boost::asio::ip::address ca, int cp, int uid);
     bool parse_cfg(const std::string &fn,
