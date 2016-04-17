@@ -26,22 +26,23 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <boost/lexical_cast.hpp>
 #include "identclient.hpp"
 
 %%{
     machine ident_parser;
     action SPSt { spstart = p; }
     action SPEn {
-        server_port_ = boost::lexical_cast<int>
-            (inbuf_.substr(spstart - inbuf_.c_str(), p - spstart).c_str());
+        char pbuf[9] = {0};
+        memcpy(pbuf, spstart, p - spstart);
+        server_port_ = atoi(pbuf);
         if (server_port_ > 65535)
             return ParseBadPort;
     }
     action CPSt { cpstart = p; }
     action CPEn {
-        client_port_ = boost::lexical_cast<int>
-            (inbuf_.substr(cpstart - inbuf_.c_str(), p - cpstart).c_str());
+        char pbuf[9] = {0};
+        memcpy(pbuf, cpstart, p - cpstart);
+        client_port_ = atoi(pbuf);
         if (client_port_ > 65535)
             return ParseBadPort;
     }
