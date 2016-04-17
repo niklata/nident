@@ -29,7 +29,7 @@ include_directories("${PROJECT_SOURCE_DIR}"
 add_subdirectory(ncmlib)
 add_subdirectory(cppformat)
 
-find_package( Boost COMPONENTS system program_options )
+find_package( Boost COMPONENTS system )
 link_directories ( ${Boost_LIBRARY_DIRS} )
 include_directories ( ${Boost_INCLUDE_DIRS} )
 find_package(Threads)
@@ -64,26 +64,26 @@ set(NIDENT_SRCS
   nident.cpp
   )
 
-set(NLTEST_SRCS
-  netlink.cpp
-  nl-test.cpp
-  )
-
-set(PTEST_SRCS
-  siphash.cpp
-  netlink.cpp
-  parse.cpp
-  parsetest.cpp
-  )
+#set(NLTEST_SRCS
+#  netlink.cpp
+#  nl-test.cpp
+#  )
+#
+#set(PTEST_SRCS
+#  siphash.cpp
+#  netlink.cpp
+#  parse.cpp
+#  parsetest.cpp
+#  )
 
 add_executable(nident ${RAGEL_IDENTPARSE} ${RAGEL_PARSECFG} ${NIDENT_SRCS})
-target_link_libraries(nident ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
-                             ncmlib cppformat)
+target_link_libraries(nident ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES} ncmlib cppformat)
 
-add_executable(nl-test ${NLTEST_SRCS})
-target_link_libraries(nl-test ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
-                              cppformat)
+#add_executable(nl-test ${NLTEST_SRCS})
+#target_link_libraries(nl-test ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
+#                              cppformat)
+#
+#add_executable(parsetest ${RAGEL_PARSECFG} ${PTEST_SRCS})
+#target_link_libraries(parsetest ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
+#                                ncmlib cppformat)
 
-add_executable(parsetest ${RAGEL_PARSECFG} ${PTEST_SRCS})
-target_link_libraries(parsetest ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
-                                ncmlib cppformat)

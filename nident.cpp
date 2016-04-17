@@ -31,7 +31,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <fstream>
 
 #include <unistd.h>
 #include <stdio.h>
@@ -50,15 +49,14 @@
 
 #include <signal.h>
 #include <errno.h>
-#include <getopt.h>
 
 #include <nk/format.hpp>
 #include <boost/asio.hpp>
-#include <boost/program_options.hpp>
 
 #include "identclient.hpp"
 #include "netlink.hpp"
 #include "siphash.hpp"
+#include "optionparser.hpp"
 
 extern "C" {
 #include "nk/privilege.h"
@@ -66,8 +64,6 @@ extern "C" {
 #include "nk/seccomp-bpf.h"
 #include "nk/exec.h"
 }
-
-namespace po = boost::program_options;
 
 boost::asio::io_service io_service;
 static boost::asio::signal_set asio_signal_set(io_service);
@@ -180,170 +176,167 @@ static int enforce_seccomp(void)
     return 0;
 }
 
-static po::variables_map fetch_options(int ac, char *av[])
+static void print_version(void)
 {
-    std::string config_file;
-
-    po::options_description cli_opts("Command-line-exclusive options");
-    cli_opts.add_options()
-        ("config,c", po::value<std::string>(&config_file),
-         "path to configuration file")
-        ("background", "run as a background daemon")
-        ("quiet,q", "don't print to std(out|err) or log")
-        ("help,h", "print help message")
-        ("version,v", "print version information")
-        ;
-
-    po::options_description gopts("Options");
-    gopts.add_options()
-        ("paranoid,p",
-         "return UNKNOWN-ERROR for all errors except INVALID-PORT (prevents inference of used ports)")
-        ("pidfile,f", po::value<std::string>(),
-         "path to process id file")
-        ("chroot,C", po::value<std::string>(),
-         "path in which nident should chroot itself")
-        ("max-bytes,b", po::value<int>(),
-         "maximum number of bytes allowed from a client")
-        ("address,a", po::value<std::vector<std::string> >()->composing(),
-         "'address[:port]' on which to listen (default all local)")
-        ("user,u", po::value<std::string>(),
-         "user name that nident should run as")
-        ("salt,s", po::value<std::string>(),
-         "string that should be used as salt for hash replies")
-        ("disable-ipv6", "host kernel doesn't support ipv6")
-        ("seccomp-enforce,S", "enforce seccomp syscall restrictions")
-        ;
-
-    po::options_description cmdline_options;
-    cmdline_options.add(cli_opts).add(gopts);
-    po::options_description cfgfile_options;
-    cfgfile_options.add(gopts);
-
-    po::positional_options_description p;
-    p.add("address", -1);
-    po::variables_map vm;
-    try {
-        po::store(po::command_line_parser(ac, av).
-                  options(cmdline_options).positional(p).run(), vm);
-    } catch (const std::exception& e) {
-        fmt::print(stderr, "{}\n", e.what());
-    }
-    po::notify(vm);
-
-    if (config_file.size()) {
-        std::ifstream ifs(config_file.c_str());
-        if (!ifs) {
-            fmt::print(stderr, "Could not open config file: {}\n", config_file);
-            std::exit(EXIT_FAILURE);
-        }
-        po::store(po::parse_config_file(ifs, cfgfile_options), vm);
-        po::notify(vm);
-    }
-
-    if (vm.count("help")) {
-        fmt::print("nident " NIDENT_VERSION ", ident server.\n"
-                  "Copyright (c) 2010-2016 Nicholas J. Kain\n"
-                  "{} [options] addresses...\n{}\n", av[0], gopts);
-        std::exit(EXIT_FAILURE);
-    }
-    if (vm.count("version")) {
-        fmt::print("nident " NIDENT_VERSION ", ident server.\n"
-            "Copyright (c) 2010-2016 Nicholas J. Kain\n"
-            "All rights reserved.\n\n"
-            "Redistribution and use in source and binary forms, with or without\n"
-            "modification, are permitted provided that the following conditions are met:\n\n"
-            "- Redistributions of source code must retain the above copyright notice,\n"
-            "  this list of conditions and the following disclaimer.\n"
-            "- Redistributions in binary form must reproduce the above copyright notice,\n"
-            "  this list of conditions and the following disclaimer in the documentation\n"
-            "  and/or other materials provided with the distribution.\n\n"
-            "THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\n"
-            "AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\n"
-            "IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE\n"
-            "ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE\n"
-            "LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR\n"
-            "CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF\n"
-            "SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS\n"
-            "INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN\n"
-            "CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)\n"
-            "ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE\n"
-            "POSSIBILITY OF SUCH DAMAGE.\n");
-        std::exit(EXIT_FAILURE);
-    }
-    return vm;
+    fmt::print("nident " NIDENT_VERSION ", ident server.\n"
+               "Copyright (c) 2010-2016 Nicholas J. Kain\n"
+               "All rights reserved.\n\n"
+               "Redistribution and use in source and binary forms, with or without\n"
+               "modification, are permitted provided that the following conditions are met:\n\n"
+               "- Redistributions of source code must retain the above copyright notice,\n"
+               "  this list of conditions and the following disclaimer.\n"
+               "- Redistributions in binary form must reproduce the above copyright notice,\n"
+               "  this list of conditions and the following disclaimer in the documentation\n"
+               "  and/or other materials provided with the distribution.\n\n"
+               "THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\n"
+               "AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\n"
+               "IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE\n"
+               "ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE\n"
+               "LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR\n"
+               "CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF\n"
+               "SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS\n"
+               "INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN\n"
+               "CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)\n"
+               "ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE\n"
+               "POSSIBILITY OF SUCH DAMAGE.\n");
 }
 
+struct Arg : public option::Arg
+{
+    static void print_error(const char *head, const option::Option &opt, const char *tail)
+    {
+        fmt::fprintf(stderr, "%s%.*s%s", head, opt.namelen, opt.name, tail);
+    }
+    static option::ArgStatus Unknown(const option::Option &opt, bool msg)
+    {
+        if (msg) print_error("Unknown option '", opt, "'\n");
+        return option::ARG_ILLEGAL;
+    }
+    static option::ArgStatus String(const option::Option &opt, bool msg)
+    {
+        if (opt.arg && opt.arg[0])
+            return option::ARG_OK;
+        if (msg) print_error("Option '", opt, "' requires an argument\n");
+        return option::ARG_ILLEGAL;
+    }
+    static option::ArgStatus Integer(const option::Option &opt, bool msg)
+    {
+        char *endptr{nullptr};
+        if (opt.arg && strtol(opt.arg, &endptr, 10)){}
+        if (endptr != opt.arg && !*endptr)
+            return option::ARG_OK;
+        if (msg) print_error("Option '", opt, "' requires an integer argument\n");
+        return option::ARG_ILLEGAL;
+    }
+};
+enum OpIdx {
+    OPT_UNKNOWN, OPT_HELP, OPT_VERSION, OPT_BACKGROUND, OPT_PARANOID,
+    OPT_PIDFILE, OPT_CHROOT, OPT_MAXBYTES, OPT_USER, OPT_SALT,
+    OPT_NOIPV6, OPT_SECCOMP, OPT_QUIET
+};
+static const option::Descriptor usage[] = {
+    { OPT_UNKNOWN,    0,  "",           "", Arg::Unknown,
+        "nident " NIDENT_VERSION ", ident server.\n"
+        "Copyright (c) 2010-2016 Nicholas J. Kain\n"
+        "nident [options] [listen-address[:port]]...\n\nOptions:" },
+    { OPT_HELP,       0, "h",            "help",    Arg::None, "\t-h, \t--help  \tPrint usage and exit." },
+    { OPT_VERSION,    0, "v",         "version",    Arg::None, "\t-v, \t--version  \tPrint version and exit." },
+    { OPT_BACKGROUND, 0, "b",      "background",    Arg::None, "\t-b, \t--background  \tRun as a background daemon." },
+    { OPT_PARANOID,   0, "p",        "paranoid",    Arg::None, "\t-p, \t--paranoid  \tReturn UNKNOWN-ERROR for all errors except INVALID-PORT (prevents inference of used ports)." },
+    { OPT_PIDFILE,    0, "f",         "pidfile",  Arg::String, "\t-f, \t--pidfile  \tPath to process id file." },
+    { OPT_CHROOT,     0, "C",          "chroot",  Arg::String, "\t-C, \t--chroot  \tPath in which nident should chroot itself." },
+    { OPT_MAXBYTES,   0, "b",       "max-bytes", Arg::Integer, "\t-b, \t--max-bytes  \tMaximum number of bytes allowed from a client." },
+    { OPT_USER,       0, "u",            "user",  Arg::String, "\t-u, \t--user  \tUser name that nident should run as." },
+    { OPT_SALT,       0, "s",            "salt",  Arg::String, "\t-s, \t--salt  \tString that should be used as salt for hash replies." },
+    { OPT_NOIPV6,     0,  "",    "disable-ipv6",    Arg::None, "\t    \t--disable-ipv6  \tHost kernel doesn't support ipv6." },
+    { OPT_SECCOMP,    0,  "", "seccomp-enforce",    Arg::None, "\t    \t--seccomp-enforce  \tEnforce seccomp syscall restrictions." },
+    { OPT_QUIET,      0, "q",           "quiet",    Arg::None, "\t-q, \t--quiet  \tDon't log to std(out|err) or syslog." },
+    {0,0,0,0,0,0}
+};
 static void process_options(int ac, char *av[])
 {
+    ac-=ac>0; av+=ac>0;
+    option::Stats stats(usage, ac, av);
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wvla"
+    option::Option options[stats.options_max], buffer[stats.buffer_max];
+#pragma GCC diagnostic pop
+    option::Parser parse(usage, ac, av, options, buffer);
+#else
+    auto options = std::make_unique<option::Option[]>(stats.options_max);
+    auto buffer = std::make_unique<option::Option[]>(stats.buffer_max);
+    option::Parser parse(usage, ac, av, options.get(), buffer.get());
+#endif
+    if (parse.error())
+        std::exit(EXIT_FAILURE);
+    if (options[OPT_HELP]) {
+        int col = getenv("COLUMNS") ? atoi(getenv("COLUMNS")) : 80;
+        option::printUsage(fwrite, stdout, usage, col);
+        std::exit(EXIT_FAILURE);
+    }
+    if (options[OPT_VERSION]) {
+        print_version();
+        std::exit(EXIT_FAILURE);
+    }
+
     std::vector<std::string> addrlist;
     std::string pidfile, chroot_path;
     bool use_seccomp(false);
 
-    auto vm(fetch_options(ac, av));
-
-    if (vm.count("paranoid"))
-        gParanoid = true;
-    if (vm.count("background"))
-        gflags_detach = 1;
-    if (vm.count("quiet"))
-        gflags_quiet = 1;
-    if (vm.count("disable-ipv6"))
-        v4only = true;
-    if (vm.count("max-bytes")) {
-        max_client_bytes = vm["max-bytes"].as<int>();
-        if (max_client_bytes < 64)
-            max_client_bytes = 64;
-        else if (max_client_bytes > 1024)
-            max_client_bytes = 1024;
-    }
-    if (vm.count("pidfile"))
-        pidfile = vm["pidfile"].as<std::string>();
-    if (vm.count("chroot"))
-        chroot_path = vm["chroot"].as<std::string>();
-    if (vm.count("address"))
-        addrlist = vm["address"].as<std::vector<std::string> >();
-    if (vm.count("user")) {
-        auto t = vm["user"].as<std::string>();
-        if (nk_uidgidbyname(t.c_str(), &nident_uid, &nident_gid)) {
-            fmt::print(stderr, "invalid user '{}' specified\n", t);
-            std::exit(EXIT_FAILURE);
+    for (int i = 0; i < parse.optionsCount(); ++i) {
+        option::Option &opt = buffer[i];
+        switch (opt.index()) {
+            case OPT_BACKGROUND: gflags_detach = 1; break;
+            case OPT_PARANOID: gParanoid = true; break;
+            case OPT_PIDFILE: pidfile = std::string(opt.arg); break;
+            case OPT_CHROOT: chroot_path = std::string(opt.arg); break;
+            case OPT_MAXBYTES:
+                max_client_bytes = std::max(64, std::min(1024, atoi(opt.arg)));
+                break;
+            case OPT_USER: {
+                if (nk_uidgidbyname(opt.arg, &nident_uid, &nident_gid)) {
+                    fmt::print(stderr, "invalid user '{}' specified\n", opt.arg);
+                    std::exit(EXIT_FAILURE);
+                }
+                break;
+            }
+            case OPT_SALT: {
+                const auto optlen = strlen(opt.arg);
+                gSaltK0 = nk::siphash24_hash(SALTC1, SALTC2, opt.arg, optlen);
+                gSaltK1 = nk::siphash24_hash(gSaltK0, SALTC1 ^ SALTC2, opt.arg, optlen);
+                break;
+            }
+            case OPT_NOIPV6: v4only = true; break;
+            case OPT_SECCOMP: use_seccomp = true; break;
+            case OPT_QUIET: gflags_quiet = 1; break;
         }
     }
-    if (vm.count("salt")) {
-        auto sst = vm["salt"].as<std::string>();
-        gSaltK0 = nk::siphash24_hash(SALTC1, SALTC2, sst.c_str(), sst.size());
-        gSaltK1 = nk::siphash24_hash(gSaltK0, SALTC1 ^ SALTC2,
-                                     sst.c_str(), sst.size());
+    for (int i = 0; i < parse.nonOptionsCount(); ++i) {
+        addrlist.emplace_back(parse.nonOption(i));
     }
-    if (vm.count("seccomp-enforce"))
-        use_seccomp = true;
 
-    if (!addrlist.size()) {
+    for (const auto &i: addrlist) {
+        std::string addr(i);
+        int port = 113;
+        auto loc = addr.rfind(":");
+        if (loc != std::string::npos) {
+            auto pstr = addr.substr(loc + 1);
+            port = atoi(pstr.c_str());
+            addr.erase(loc);
+        }
+        try {
+            auto addy = boost::asio::ip::address::from_string(addr);
+            auto ep = boost::asio::ip::tcp::endpoint(addy, port);
+            listeners.emplace_back(std::make_unique<ClientListener>(ep));
+        } catch (const boost::system::error_code&) {
+            fmt::print(stderr, "bad address: {}", addr);
+        }
+    }
+    if (listeners.empty()) {
         auto ep = boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v6(), 113);
         listeners.emplace_back(std::make_unique<ClientListener>(ep));
-    } else
-        for (const auto &i: addrlist) {
-            std::string addr(i);
-            int port = 113;
-            auto loc = addr.rfind(":");
-            if (loc != std::string::npos) {
-                auto pstr = addr.substr(loc + 1);
-                try {
-                    port = boost::lexical_cast<unsigned short>(pstr);
-                } catch (const boost::bad_lexical_cast&) {
-                    fmt::print(stderr, "bad port in address '{}', defaulting to 113\n",
-                               addr);
-                }
-                addr.erase(loc);
-            }
-            try {
-                auto addy = boost::asio::ip::address::from_string(addr);
-                auto ep = boost::asio::ip::tcp::endpoint(addy, port);
-                listeners.emplace_back(std::make_unique<ClientListener>(ep));
-            } catch (const boost::system::error_code&) {
-                fmt::print(stderr, "bad address: {}", addr);
-            }
-        }
+    }
 
     if (gflags_detach) {
         if (daemon(0,0)) {
