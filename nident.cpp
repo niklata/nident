@@ -140,6 +140,7 @@ static int enforce_seccomp(void)
         ALLOW_SYSCALL(stat),
         ALLOW_SYSCALL(open),
         ALLOW_SYSCALL(close),
+        ALLOW_SYSCALL(futex),
         ALLOW_SYSCALL(fstat),
         ALLOW_SYSCALL(ioctl),
         ALLOW_SYSCALL(rt_sigreturn),
