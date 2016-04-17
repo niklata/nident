@@ -28,13 +28,16 @@
 
 #include "parse.hpp"
 
+#include <cstdio>
 #include <string.h>
-#include <fstream>
 #include <stdint.h>
 #include <pwd.h>
 #include <nk/format.hpp>
 
 #include "asio_addrcmp.hpp"
+#include "scopeguard.hpp"
+
+#define MAX_LINE 2048
 
 namespace ba = boost::asio;
 
@@ -53,7 +56,7 @@ namespace ba = boost::asio;
     action SetPolAccept { ci.policy.action = PolicyAccept; }
     action SpoofSt { ci.policy.action = PolicySpoof; spoofstart = p; }
     action SpoofEn {
-        ci.policy.spoof = l.substr(spoofstart - l.c_str(), p - spoofstart);
+        ci.policy.spoof = std::string(spoofstart, p - spoofstart);
     }
     action SetPolHash { ci.policy.action = PolicyHash; }
     action SetHashUID { ci.policy.setHashUID(); }
@@ -62,12 +65,14 @@ namespace ba = boost::asio;
     action SetHashCP  { ci.policy.setHashCP(); }
     action HostSt { hoststart = p; }
     action HostEn {
-        hoststr = l.substr(hoststart - l.c_str(), p - hoststart);
+        hoststr = std::string(hoststart, p - hoststart);
         ci.host = ba::ip::address::from_string(hoststr);
     }
     action MaskSt { maskstart = p; }
     action MaskEn {
-        ci.mask = atoi(l.substr(maskstart - l.c_str(), p - maskstart).c_str());
+        char maskbuf[8] = {0};
+        memcpy(maskbuf, maskstart, p - maskstart);
+        ci.mask = atoi(maskbuf);
         if (ci.host.is_v4() && ci.mask > 32)
             ci.mask = 32;
         if (ci.mask > 128)
@@ -75,13 +80,15 @@ namespace ba = boost::asio;
     }
     action PortLoSt { portlo_start = p; }
     action PortLoEn {
-        lport = atoi(l.substr(portlo_start - l.c_str(),
-                              p - portlo_start).c_str());
+        char pbuf[8] = {0};
+        memcpy(pbuf, portlo_start, p - portlo_start);
+        lport = atoi(pbuf);
     }
     action PortHiSt { porthi_start = p; }
     action PortHiEn {
-        hport = atoi(l.substr(porthi_start - l.c_str(),
-                              p - porthi_start).c_str());
+        char pbuf[8] = {0};
+        memcpy(pbuf, porthi_start, p - porthi_start);
+        hport = atoi(pbuf);
     }
     action LocPortSt { lport = -1; hport = -1; }
     action LocPortEn { ci.low_lport = lport; ci.high_lport = hport; }
@@ -114,25 +121,26 @@ namespace ba = boost::asio;
 bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
                       ba::ip::address ca, int cp)
 {
-    std::string l;
-    std::ifstream f(fn, std::ifstream::in);
-
-    if (f.fail() || f.bad() || f.eof()) {
-        fmt::print(stderr, "Parse - failed to open file: '{}'\n", fn);
-        goto out;
+    char buf[MAX_LINE];
+    auto f = fopen(fn.c_str(), "r");
+    if (!f) {
+        fmt::print(stderr, "{}: failed to open config file \"{}\": {}\n",
+                   __func__, fn, strerror(errno));
+        return found_ci_;
     }
-
-    while (1) {
-        std::getline(f, l);
-        if (f.eof()) {
-            break;
-        } else if (f.bad()) {
-            fmt::print(stderr, "Parse - fatal io error fetching line of '{}'\n", fn);
-            break;
-        } else if (f.fail()) {
-            fmt::print(stderr, "Parse - non-fatal io error fetching line of '{}'\n", fn);
+    SCOPE_EXIT{ fclose(f); };
+    while (!feof(f)) {
+        auto fsv = fgets(buf, sizeof buf, f);
+        auto llen = strlen(buf);
+        if (buf[llen-1] == '\n')
+            buf[--llen] = 0;
+        if (!fsv) {
+            if (!feof(f))
+                fmt::print(stderr, "{}: io error fetching line of '{}'\n", __func__, fn);
             break;
         }
+        if (llen == 0)
+            continue;
 
         ConfigItem ci;
         std::string hoststr;
@@ -141,15 +149,15 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
         int hport, lport;
 
         int cs = 0;
-        const char *p = l.c_str();
-        const char *pe = p + l.size();
+        const char *p = buf;
+        const char *pe = p + llen;
         const char *eof = pe;
 
         try {
             %% write init;
             %% write exec;
         } catch (const boost::system::error_code &ec) {
-            fmt::print(stderr, "Parse - bad host string: '{}'\n", hoststr);
+            fmt::print(stderr, "{}: bad host string: '{}'\n", __func__, hoststr);
             continue; // invalid
         }
 
@@ -165,8 +173,6 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
         ci_ = ci;
         break;
     }
-    f.close();
-  out:
     return found_ci_;
 }
 

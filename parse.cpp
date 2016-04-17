@@ -31,7 +31,6 @@
 
 #include <string.h>
 #include <nk/format.hpp>
-#include <fstream>
 #include <stdint.h>
 #include <pwd.h>
 
