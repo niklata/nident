@@ -76,7 +76,8 @@ bool gChrooted = false;
 uint64_t gSaltK0 = SALTC1, gSaltK1 = SALTC2;
 static uid_t nident_uid;
 static gid_t nident_gid;
-static bool v4only = false;
+static bool v4only{false};
+static bool use_seccomp{false};
 static int gflags_detach;
 extern int gflags_quiet;
 
@@ -103,8 +104,10 @@ static void process_signals()
         });
 }
 
-static int enforce_seccomp(void)
+static int enforce_seccomp(bool changed_uidgid)
 {
+    if (!use_seccomp)
+        return 0;
     struct sock_filter filter[] = {
         VALIDATE_ARCHITECTURE,
         EXAMINE_SYSCALL,
@@ -167,7 +170,7 @@ static int enforce_seccomp(void)
     memset(&prog, 0, sizeof prog);
     prog.len = (unsigned short)(sizeof filter / sizeof filter[0]);
     prog.filter = filter;
-    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0))
+    if (!changed_uidgid && prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0))
         return -1;
     if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog))
         return -1;
@@ -282,7 +285,6 @@ static void process_options(int ac, char *av[])
 
     std::vector<std::string> addrlist;
     std::string pidfile, chroot_path;
-    bool use_seccomp(false);
 
     for (int i = 0; i < parse.optionsCount(); ++i) {
         option::Option &opt = buffer[i];
@@ -365,9 +367,9 @@ static void process_options(int ac, char *av[])
 
     if (nident_uid != 0 || nident_gid != 0)
         nk_set_uidgid(nident_uid, nident_gid, NULL, 0);
-    if (use_seccomp) {
-        if (enforce_seccomp())
-            fmt::print(stderr, "seccomp filter cannot be installed\n");
+    if (enforce_seccomp(nident_uid || nident_gid)) {
+        fmt::print(stderr, "seccomp filter cannot be installed\n");
+        std::exit(EXIT_FAILURE);
     }
 }
 
