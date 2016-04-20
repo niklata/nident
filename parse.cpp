@@ -101,15 +101,10 @@ static char cmap[] = {
  */
 std::string Parse::compress_64_to_unix(uint64_t qword)
 {
-    union {
-        unsigned char c[8];
-        uint64_t i;
-    } b;
-    char buf[9];
-    buf[8] = '\0';
-    b.i = qword;
-    for (int i = 0; i < 8; ++i)
-        buf[i] = cmap[b.c[i] & 0x3f];
-    return std::string(buf);
+    char buf[8];
+    memcpy(buf, &qword, sizeof buf);
+    for (unsigned i = 0; i < sizeof buf; ++i)
+        buf[i] = cmap[buf[i] & 0x3f];
+    return std::string(buf, sizeof buf);
 }
 
