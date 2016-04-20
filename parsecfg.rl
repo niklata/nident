@@ -26,16 +26,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "parse.hpp"
-
 #include <cstdio>
 #include <string.h>
 #include <stdint.h>
 #include <pwd.h>
 #include <nk/format.hpp>
-
+#include <nk/scopeguard.hpp>
 #include "asio_addrcmp.hpp"
-#include "scopeguard.hpp"
+#include "parse.hpp"
 
 #define MAX_LINE 2048
 

@@ -31,7 +31,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,27 +42,22 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <ctype.h>
-
 #include <pwd.h>
 #include <grp.h>
-
 #include <signal.h>
 #include <errno.h>
-
 #include <nk/format.hpp>
+#include <nk/optionarg.hpp>
 #include <boost/asio.hpp>
-
-#include "identclient.hpp"
-#include "netlink.hpp"
-#include "siphash.hpp"
-#include "optionarg.hpp"
-
 extern "C" {
 #include "nk/privilege.h"
 #include "nk/pidfile.h"
 #include "nk/seccomp-bpf.h"
 #include "nk/exec.h"
 }
+#include "identclient.hpp"
+#include "netlink.hpp"
+#include "siphash.hpp"
 
 boost::asio::io_service io_service;
 static boost::asio::signal_set asio_signal_set(io_service);
