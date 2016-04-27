@@ -36,9 +36,7 @@
 #include "parse.hpp"
 #include "netlink.hpp"
 
-namespace ba = boost::asio;
-
-extern ba::io_service io_service;
+extern asio::io_service io_service;
 extern Netlink *nlink;
 extern bool gParanoid;
 extern bool gChrooted;
@@ -46,7 +44,7 @@ extern int gflags_quiet;
 
 unsigned int max_client_bytes = 128;
 
-IdentClient::IdentClient(ba::ip::tcp::socket socket)
+IdentClient::IdentClient(asio::ip::tcp::socket socket)
         : state_(STATE_WAITIN), tcp_socket_(std::move(socket)),
           writePending_(false)
 {}
@@ -55,13 +53,11 @@ void IdentClient::do_read()
 {
     auto sfd(shared_from_this());
     tcp_socket_.async_read_some
-        (ba::buffer(inBytes_),
-         [this, sfd](const boost::system::error_code &ec,
-                     std::size_t bytes_xferred)
+        (asio::buffer(inBytes_),
+         [this, sfd](const std::error_code &ec, std::size_t bytes_xferred)
          {
              if (state_ != STATE_DONE && ec) {
-                 fmt::print(stderr, "Client read error: {}\n",
-                            boost::system::system_error(ec).what());
+                 fmt::print(stderr, "Client read error: {}\n", std::system_error(ec).what());
                  return;
              }
              if (!bytes_xferred)
@@ -83,15 +79,13 @@ void IdentClient::do_write()
     writePending_ = true;
     auto sfd(shared_from_this());
     // State can change: STATE_WAITOUT -> STATE_DONE
-    ba::async_write(
-        tcp_socket_, ba::buffer(outbuf_),
-        [this, sfd](const boost::system::error_code &ec,
-                    std::size_t bytes_xferred)
+    asio::async_write(
+        tcp_socket_, asio::buffer(outbuf_),
+        [this, sfd](const std::error_code &ec, std::size_t bytes_xferred)
         {
             writePending_ = false;
             if (ec) {
-                fmt::print(stderr, "Client write error: {}\n",
-                           boost::system::system_error(ec).what());
+                fmt::print(stderr, "Client write error: {}\n", std::system_error(ec).what());
                 return;
             }
             outbuf_.erase(0, bytes_xferred);
@@ -202,11 +196,11 @@ bool IdentClient::create_reply()
     return true;
 }
 
-ClientListener::ClientListener(const ba::ip::tcp::endpoint &endpoint)
+ClientListener::ClientListener(const asio::ip::tcp::endpoint &endpoint)
         : acceptor_(io_service), socket_(io_service)
 {
     acceptor_.open(endpoint.protocol());
-    acceptor_.set_option(ba::ip::tcp::acceptor::reuse_address(true));
+    acceptor_.set_option(asio::ip::tcp::acceptor::reuse_address(true));
     acceptor_.bind(endpoint);
     acceptor_.listen();
     start_accept();
@@ -216,7 +210,7 @@ void ClientListener::start_accept()
 {
     acceptor_.async_accept
         (socket_,
-         [this](const boost::system::error_code &ec)
+         [this](const std::error_code &ec)
          {
              if (ec)
                  return;

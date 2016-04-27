@@ -48,19 +48,18 @@
 #include <errno.h>
 #include <nk/format.hpp>
 #include <nk/optionarg.hpp>
-#include <boost/asio.hpp>
+#include <asio.hpp>
 extern "C" {
 #include "nk/privilege.h"
 #include "nk/pidfile.h"
 #include "nk/seccomp-bpf.h"
-#include "nk/exec.h"
 }
 #include "identclient.hpp"
 #include "netlink.hpp"
 #include "siphash.hpp"
 
-boost::asio::io_service io_service;
-static boost::asio::signal_set asio_signal_set(io_service);
+asio::io_service io_service;
+static asio::signal_set asio_signal_set(io_service);
 static std::vector<std::unique_ptr<ClientListener>> listeners;
 std::unique_ptr<Netlink> nlink;
 bool gParanoid = false;
@@ -92,10 +91,7 @@ static void process_signals()
     }
     asio_signal_set.add(SIGINT);
     asio_signal_set.add(SIGTERM);
-    asio_signal_set.async_wait(
-        [](const boost::system::error_code &, int signum) {
-            io_service.stop();
-        });
+    asio_signal_set.async_wait([](const std::error_code &, int signum) { io_service.stop(); });
 }
 
 static int enforce_seccomp(bool changed_uidgid)
@@ -294,15 +290,15 @@ static void process_options(int ac, char *av[])
             addr.erase(loc);
         }
         try {
-            auto addy = boost::asio::ip::address::from_string(addr);
-            auto ep = boost::asio::ip::tcp::endpoint(addy, port);
+            auto addy = asio::ip::address::from_string(addr);
+            auto ep = asio::ip::tcp::endpoint(addy, port);
             listeners.emplace_back(std::make_unique<ClientListener>(ep));
-        } catch (const boost::system::error_code&) {
+        } catch (const std::error_code&) {
             fmt::print(stderr, "bad address: {}", addr);
         }
     }
     if (listeners.empty()) {
-        auto ep = boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v6(), 113);
+        auto ep = asio::ip::tcp::endpoint(asio::ip::tcp::v6(), 113);
         listeners.emplace_back(std::make_unique<ClientListener>(ep));
     }
 
@@ -318,7 +314,6 @@ static void process_options(int ac, char *av[])
 
     umask(077);
     process_signals();
-    nk_fix_env(nident_uid, 0);
 
     nlink = std::make_unique<Netlink>(v4only);
     if (!nlink->open(NETLINK_INET_DIAG)) {

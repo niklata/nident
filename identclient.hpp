@@ -33,7 +33,7 @@
 #include <memory>
 #include <netdb.h>
 
-#include <boost/asio.hpp>
+#include <asio.hpp>
 
 class IdentClient
     : public std::enable_shared_from_this<IdentClient>
@@ -46,7 +46,7 @@ public:
         STATE_DONE
     };
 
-    IdentClient(boost::asio::ip::tcp::socket socket);
+    IdentClient(asio::ip::tcp::socket socket);
     IdentClient(const IdentClient &) = delete;
     IdentClient& operator=(const IdentClient &) = delete;
 
@@ -62,14 +62,14 @@ private:
     };
 
     IdentClientState state_;
-    boost::asio::ip::tcp::socket tcp_socket_;
+    asio::ip::tcp::socket tcp_socket_;
     std::array<char, 64> inBytes_;
     std::string inbuf_;
     bool writePending_;
     std::string outbuf_;
 
-    boost::asio::ip::address server_address_;
-    boost::asio::ip::address client_address_;
+    asio::ip::address server_address_;
+    asio::ip::address client_address_;
 
     int server_port_; // Port on the local machine this server is running on.
     int client_port_; // Port on the remote machine making the ident request.
@@ -86,13 +86,13 @@ private:
 class ClientListener
 {
 public:
-    ClientListener(const boost::asio::ip::tcp::endpoint &endpoint);
+    ClientListener(const asio::ip::tcp::endpoint &endpoint);
     ClientListener(const ClientListener &) = delete;
     ClientListener& operator=(const ClientListener &) = delete;
-    const boost::asio::ip::tcp::acceptor &socket() { return acceptor_; }
+    const asio::ip::tcp::acceptor &socket() { return acceptor_; }
 private:
-    boost::asio::ip::tcp::acceptor acceptor_;
-    boost::asio::ip::tcp::socket socket_;
+    asio::ip::tcp::acceptor acceptor_;
+    asio::ip::tcp::socket socket_;
 
     void start_accept();
 };

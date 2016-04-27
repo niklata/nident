@@ -34,13 +34,11 @@
 #include <stdint.h>
 #include <pwd.h>
 
-namespace ba = boost::asio;
-
 extern bool gParanoid;
 extern uint64_t gSaltK0, gSaltK1;
 
-std::string Parse::get_response(ba::ip::address sa, int sp,
-                                ba::ip::address ca, int cp, int uid)
+std::string Parse::get_response(asio::ip::address sa, int sp,
+                                asio::ip::address ca, int cp, int uid)
 {
     if (!found_ci_ || ci_.policy.action == PolicyDeny) {
         if (gParanoid)

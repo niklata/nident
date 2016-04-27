@@ -1,5 +1,4 @@
 /* parse.hpp - proc/net/tcp6? and config file parsing
- * Time-stamp: <2014-01-11 08:55:32 njk>
  *
  * (c) 2010-2011 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
@@ -31,7 +30,7 @@
 #define PARSE_H_
 
 #include <string>
-#include <boost/asio.hpp>
+#include <asio.hpp>
 
 class Parse
 {
@@ -65,7 +64,7 @@ public:
         int hashitems;
     };
     struct ConfigItem {
-        boost::asio::ip::address host;
+        asio::ip::address host;
         int mask;
         int low_lport;
         int high_lport;
@@ -81,11 +80,10 @@ public:
     }
     Parse(const Parse &) = delete;
     Parse& operator=(const Parse &) = delete;
-    std::string get_response(boost::asio::ip::address sa, int sp,
-                             boost::asio::ip::address ca, int cp, int uid);
-    bool parse_cfg(const std::string &fn,
-                   boost::asio::ip::address sa, int sp,
-                   boost::asio::ip::address ca, int cp);
+    std::string get_response(asio::ip::address sa, int sp, asio::ip::address ca,
+                             int cp, int uid);
+    bool parse_cfg(const std::string &fn, asio::ip::address sa, int sp, asio::ip::address ca,
+                   int cp);
 private:
     std::string compress_64_to_unix(uint64_t qword);
     bool found_ci_;

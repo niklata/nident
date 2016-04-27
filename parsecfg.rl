@@ -37,8 +37,6 @@
 
 #define MAX_LINE 2048
 
-namespace ba = boost::asio;
-
 // x.x.x.x[/n] (*|l[:h]) (*|l[:h]) -> POLICY
 // x:x:x:x:x:x:x:x[/n] (*|l[:h]) (*|l[:h]) -> POLICY
 // x:x...x[::][/n] (*|l[:h]) (*|l[:h]) -> POLICY
@@ -64,7 +62,7 @@ namespace ba = boost::asio;
     action HostSt { hoststart = p; }
     action HostEn {
         hoststr = std::string(hoststart, p - hoststart);
-        ci.host = ba::ip::address::from_string(hoststr);
+        ci.host = asio::ip::address::from_string(hoststr);
     }
     action MaskSt { maskstart = p; }
     action MaskEn {
@@ -116,8 +114,8 @@ namespace ba = boost::asio;
 %% write data;
 
 // XXX: extend config format to mask by local address?
-bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
-                      ba::ip::address ca, int cp)
+bool Parse::parse_cfg(const std::string &fn, asio::ip::address sa, int sp,
+                      asio::ip::address ca, int cp)
 {
     char buf[MAX_LINE];
     auto f = fopen(fn.c_str(), "r");
@@ -154,18 +152,18 @@ bool Parse::parse_cfg(const std::string &fn, ba::ip::address sa, int sp,
         try {
             %% write init;
             %% write exec;
-        } catch (const boost::system::error_code &ec) {
+        } catch (const std::error_code &ec) {
             fmt::print(stderr, "{}: bad host string: '{}'\n", __func__, hoststr);
             continue; // invalid
         }
 
         if (cs < cfg_parser_first_final)
             continue;
-        if (!nk::asio::port_in_bounds(sp, ci.low_lport, ci.high_lport))
+        if (!asio::port_in_bounds(sp, ci.low_lport, ci.high_lport))
             continue;
-        if (!nk::asio::port_in_bounds(cp, ci.low_rport, ci.high_rport))
+        if (!asio::port_in_bounds(cp, ci.low_rport, ci.high_rport))
             continue;
-        if (!nk::asio::compare_ip(ca, ci.host, ci.mask == -1 ? 0 : ci.mask))
+        if (!asio::compare_ip(ca, ci.host, ci.mask == -1 ? 0 : ci.mask))
             continue;
         found_ci_ = true;
         ci_ = ci;

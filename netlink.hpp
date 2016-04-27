@@ -32,7 +32,7 @@
 #include <arpa/inet.h>
 #include <linux/inet_diag.h>
 #include <linux/rtnetlink.h>
-#include <boost/asio.hpp>
+#include <asio.hpp>
 
 class Netlink
 {
@@ -40,8 +40,8 @@ public:
     explicit Netlink(bool v4only = false);
     ~Netlink();
     bool open(int socktype);
-    int get_tcp_uid(boost::asio::ip::address sa, unsigned short sp,
-                    boost::asio::ip::address da, unsigned short dp);
+    int get_tcp_uid(asio::ip::address sa, unsigned short sp,
+                    asio::ip::address da, unsigned short dp);
     struct IfStats {
         IfStats(const std::string &n) : name(n), rx(0), tx(0) {}
         const std::string name;

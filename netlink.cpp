@@ -29,7 +29,6 @@
 #include <unistd.h>
 #include "netlink.hpp"
 #include <nk/format.hpp>
-namespace ba = boost::asio;
 
 Netlink::Netlink(bool v4only) : v4only_(v4only), fd_(-1), socktype_(-1),
     portid_(0), seq_(0) {}
@@ -233,7 +232,7 @@ bool Netlink::get_if_stats(std::vector<IfStats> &ifs)
 }
 
 // v6 -> v4 is VALID IIF v6ismapped|v6iscompat
-static bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address_v4 &v, bool src)
+static bool ip_addr_eq(const asio::ip::address &a, const asio::ip::address_v4 &v, bool src)
 {
     if (a.is_v4()) {
         if (a != v) {
@@ -247,7 +246,7 @@ static bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address_v4 &v, bo
     auto a6 = a.to_v6();
     bool a6mapped(a6.is_v4_mapped()), a6compat(a6.is_v4_compatible());
     if (a6mapped || a6compat) {
-        ba::ip::address_v4 a4;
+        asio::ip::address_v4 a4;
         try {
             a4 = a6.to_v4();
         } catch (const std::bad_cast &) { goto fail; }
@@ -263,19 +262,19 @@ fail:
     return false;
 }
 
-static bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address_v6 &v, bool src)
+static bool ip_addr_eq(const asio::ip::address &a, const asio::ip::address_v6 &v, bool src)
 {
     if (a.is_v6()) {
         auto a6 = a.to_v6();
         bool amapped(a6.is_v4_mapped()), acompat(a6.is_v4_compatible());
         if (amapped || acompat) {
-            ba::ip::address_v4 a4;
+            asio::ip::address_v4 a4;
             try {
                 a4 = a6.to_v4();
             } catch (const std::bad_cast &) { goto normal_test; }
             bool vmapped(v.is_v4_mapped()), vcompat(v.is_v4_compatible());
             if (vmapped || vcompat) {
-                ba::ip::address_v4 v4;
+                asio::ip::address_v4 v4;
                 try {
                     v4 = v.to_v4();
                 } catch (const std::bad_cast &) { goto fail2; }
@@ -300,7 +299,7 @@ normal_test:
     }
     bool vmapped(v.is_v4_mapped()), vcompat(v.is_v4_compatible());
     if (vmapped || vcompat) {
-        ba::ip::address_v4 v4;
+        asio::ip::address_v4 v4;
         try {
             v4 = v.to_v4();
         } catch (const std::bad_cast &) { goto fail; }
@@ -316,15 +315,15 @@ fail:
     return false;
 }
 
-static inline bool ip_addr_eq(const ba::ip::address &a, const ba::ip::address
+static inline bool ip_addr_eq(const asio::ip::address &a, const asio::ip::address
                               &v, bool src)
 {
     return v.is_v6() ? ip_addr_eq(a, v.to_v6(), src)
                      : ip_addr_eq(a, v.to_v4(), src);
 }
 
-int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
-                         ba::ip::address da, unsigned short dp)
+int Netlink::get_tcp_uid(asio::ip::address sa, unsigned short sp,
+                         asio::ip::address da, unsigned short dp)
 {
     int uid = -1;
 
@@ -430,21 +429,21 @@ int Netlink::get_tcp_uid(ba::ip::address sa, unsigned short sp,
             }
 
             if (r->idiag_family == AF_INET6) {
-                ba::ip::address_v6::bytes_type s6b, d6b;
+                asio::ip::address_v6::bytes_type s6b, d6b;
                 memcpy(s6b.data(), r->id.idiag_src, 16);
                 memcpy(d6b.data(), r->id.idiag_dst, 16);
-                auto rs = ba::ip::address_v6(s6b);
-                auto rd = ba::ip::address_v6(d6b);
+                auto rs = asio::ip::address_v6(s6b);
+                auto rd = asio::ip::address_v6(d6b);
                 if (!ip_addr_eq(sa, rs, true))
                     continue;
                 if (!ip_addr_eq(da, rd, false))
                     continue;
             } else {
-                ba::ip::address_v4::bytes_type s4b, d4b;
+                asio::ip::address_v4::bytes_type s4b, d4b;
                 memcpy(s4b.data(), r->id.idiag_src, 4);
                 memcpy(d4b.data(), r->id.idiag_dst, 4);
-                auto rs = ba::ip::address_v4(s4b);
-                auto rd = ba::ip::address_v4(d4b);
+                auto rs = asio::ip::address_v4(s4b);
+                auto rd = asio::ip::address_v4(d4b);
                 if (!ip_addr_eq(sa, rs, true))
                     continue;
                 if (!ip_addr_eq(da, rd, false))
