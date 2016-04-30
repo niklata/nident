@@ -126,17 +126,16 @@ bool Parse::parse_cfg(const std::string &fn, asio::ip::address sa, int sp,
     }
     SCOPE_EXIT{ fclose(f); };
     while (!feof(f)) {
-        auto fsv = fgets(buf, sizeof buf, f);
-        auto llen = strlen(buf);
-        if (buf[llen-1] == '\n')
-            buf[--llen] = 0;
-        if (!fsv) {
+        if (!fgets(buf, sizeof buf, f)) {
             if (!feof(f))
                 fmt::print(stderr, "{}: io error fetching line of '{}'\n", __func__, fn);
             break;
         }
+        auto llen = strlen(buf);
         if (llen == 0)
             continue;
+        if (buf[llen-1] == '\n')
+            buf[--llen] = 0;
 
         ConfigItem ci;
         std::string hoststr;
