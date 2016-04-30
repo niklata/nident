@@ -31,6 +31,7 @@
 #include <stdint.h>
 #include <pwd.h>
 #include <nk/format.hpp>
+#include <nk/from_string.hpp>
 #include <nk/scopeguard.hpp>
 #include "asio_addrcmp.hpp"
 #include "parse.hpp"
@@ -68,7 +69,7 @@
     action MaskEn {
         char maskbuf[8] = {0};
         memcpy(maskbuf, maskstart, p - maskstart);
-        ci.mask = atoi(maskbuf);
+        ci.mask = nk::from_string<unsigned>(maskbuf);
         if (ci.host.is_v4() && ci.mask > 32)
             ci.mask = 32;
         if (ci.mask > 128)
@@ -78,13 +79,13 @@
     action PortLoEn {
         char pbuf[8] = {0};
         memcpy(pbuf, portlo_start, p - portlo_start);
-        lport = atoi(pbuf);
+        lport = nk::from_string<uint16_t>(pbuf);
     }
     action PortHiSt { porthi_start = p; }
     action PortHiEn {
         char pbuf[8] = {0};
         memcpy(pbuf, porthi_start, p - porthi_start);
-        hport = atoi(pbuf);
+        hport = nk::from_string<uint16_t>(pbuf);
     }
     action LocPortSt { lport = -1; hport = -1; }
     action LocPortEn { ci.low_lport = lport; ci.high_lport = hport; }
@@ -151,6 +152,9 @@ bool Parse::parse_cfg(const std::string &fn, asio::ip::address sa, int sp,
         try {
             %% write init;
             %% write exec;
+        } catch (const std::out_of_range &) {
+            fmt::print(stderr, "{}: bad host string: '{}'\n", __func__, hoststr);
+            continue;
         } catch (const std::error_code &ec) {
             fmt::print(stderr, "{}: bad host string: '{}'\n", __func__, hoststr);
             continue; // invalid

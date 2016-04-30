@@ -1,6 +1,6 @@
 /* nident.cpp - ident server
  *
- * (c) 2004-2014 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2004-2016 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,6 +48,7 @@
 #include <errno.h>
 #include <nk/format.hpp>
 #include <nk/optionarg.hpp>
+#include <nk/from_string.hpp>
 #include <asio.hpp>
 extern "C" {
 #include "nk/privilege.h"
@@ -236,7 +237,9 @@ static void process_options(int ac, char *av[])
     if (parse.error())
         std::exit(EXIT_FAILURE);
     if (options[OPT_HELP]) {
-        int col = getenv("COLUMNS") ? atoi(getenv("COLUMNS")) : 80;
+        uint16_t col{80};
+        const auto cols = getenv("COLUMNS");
+        if (cols) col = nk::from_string<uint16_t>(cols);
         option::printUsage(fwrite, stdout, usage, col);
         std::exit(EXIT_FAILURE);
     }
@@ -256,7 +259,12 @@ static void process_options(int ac, char *av[])
             case OPT_PIDFILE: pidfile = std::string(opt.arg); break;
             case OPT_CHROOT: chroot_path = std::string(opt.arg); break;
             case OPT_MAXBYTES:
-                max_client_bytes = std::max(64, std::min(1024, atoi(opt.arg)));
+                try {
+                    max_client_bytes = std::max(64, std::min(1024, nk::from_string<int>(opt.arg)));
+                } catch (...) {
+                    fmt::print(stderr, "invalid max-bytes '{}' specified\n", opt.arg);
+                    std::exit(EXIT_FAILURE);
+                }
                 break;
             case OPT_USER: {
                 if (nk_uidgidbyname(opt.arg, &nident_uid, &nident_gid)) {
@@ -286,7 +294,12 @@ static void process_options(int ac, char *av[])
         auto loc = addr.rfind(":");
         if (loc != std::string::npos) {
             auto pstr = addr.substr(loc + 1);
-            port = atoi(pstr.c_str());
+            try {
+                port = nk::from_string<uint16_t>(pstr.c_str());
+            } catch (...) {
+                fmt::print(stderr, "bad address: {}", addr);
+                continue;
+            }
             addr.erase(loc);
         }
         try {

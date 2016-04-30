@@ -1,6 +1,6 @@
 /* identparse.rl - ident client request handling
  *
- * (c) 2010-2013 Nicholas J. Kain <njkain at gmail dot com>
+ * (c) 2010-2016 Nicholas J. Kain <njkain at gmail dot com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <nk/from_string.hpp>
 #include "identclient.hpp"
 
 %%{
@@ -34,17 +35,21 @@
     action SPEn {
         char pbuf[9] = {0};
         memcpy(pbuf, spstart, p - spstart);
-        server_port_ = atoi(pbuf);
-        if (server_port_ > 65535)
+        try {
+            server_port_ = nk::from_string<uint16_t>(pbuf);
+        } catch (const std::out_of_range &) {
             return ParseBadPort;
+        }
     }
     action CPSt { cpstart = p; }
     action CPEn {
         char pbuf[9] = {0};
         memcpy(pbuf, cpstart, p - cpstart);
-        client_port_ = atoi(pbuf);
-        if (client_port_ > 65535)
+        try {
+            client_port_ = nk::from_string<uint16_t>(pbuf);
+        } catch (const std::out_of_range &) {
             return ParseBadPort;
+        }
     }
     ws = [ \t];
     main := ws* (digit{1,5} > SPSt % SPEn) ws*
