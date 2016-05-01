@@ -68,24 +68,41 @@
     action MaskSt { maskstart = p; }
     action MaskEn {
         char maskbuf[8] = {0};
-        memcpy(maskbuf, maskstart, p - maskstart);
-        ci.mask = nk::from_string<unsigned>(maskbuf);
-        if (ci.host.is_v4() && ci.mask > 32)
-            ci.mask = 32;
-        if (ci.mask > 128)
-            ci.mask = 128;
+        if (p - maskstart > 0) {
+            memcpy(maskbuf, maskstart, p - maskstart);
+            try {
+                ci.mask = nk::from_string<unsigned>(maskbuf);
+            } catch (...) {
+                fmt::print(stderr, "MaskEn failed: {}", maskbuf);
+                std::exit(EXIT_FAILURE);
+            }
+            if (ci.host.is_v4() && ci.mask > 32)
+                ci.mask = 32;
+            if (ci.mask > 128)
+                ci.mask = 128;
+        }
     }
     action PortLoSt { portlo_start = p; }
     action PortLoEn {
         char pbuf[8] = {0};
         memcpy(pbuf, portlo_start, p - portlo_start);
-        lport = nk::from_string<uint16_t>(pbuf);
+        try {
+            lport = nk::from_string<uint16_t>(pbuf);
+        } catch (...) {
+            fmt::print(stderr, "PortLoEn failed: {}", pbuf);
+            std::exit(EXIT_FAILURE);
+        }
     }
     action PortHiSt { porthi_start = p; }
     action PortHiEn {
         char pbuf[8] = {0};
         memcpy(pbuf, porthi_start, p - porthi_start);
-        hport = nk::from_string<uint16_t>(pbuf);
+        try {
+            hport = nk::from_string<uint16_t>(pbuf);
+        } catch (...) {
+            fmt::print(stderr, "PortHiEn failed: {}", pbuf);
+            std::exit(EXIT_FAILURE);
+        }
     }
     action LocPortSt { lport = -1; hport = -1; }
     action LocPortEn { ci.low_lport = lport; ci.high_lport = hport; }
@@ -101,12 +118,12 @@
 
     ipv4   = digit{1,3} '.' digit{1,3} '.' digit{1,3} '.' digit{1,3};
     ipv6   = xdigit{0,4} (':'xdigit{0,4}){2,7}+;
-    maskip = '/' digit{1,3};
+    maskip = '/' digit{1,3} >MaskSt %MaskEn;
     portr  = ('*'|(digit{1,5} > PortLoSt % PortLoEn)(':'(digit{1,5} > PortHiSt % PortHiEn))?);
     policy = (p_deny|p_accept|p_spoof|p_hash);
 
     main := ws* ((ipv4|ipv6) > HostSt % HostEn)
-            (maskip? > MaskSt % MaskEn )
+            maskip?
             ws+ (portr > LocPortSt % LocPortEn)
             ws+ (portr > RemPortSt % RemPortEn)
             ws* '->' ws* policy space*;
