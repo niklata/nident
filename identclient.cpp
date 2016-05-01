@@ -122,8 +122,8 @@ bool IdentClient::process_input()
     }
 
     if (state_ == STATE_GOTIN) {
-        if (!create_reply())
-            return false;
+        create_reply();
+        return false;
     }
     return true;
 }
