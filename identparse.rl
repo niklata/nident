@@ -51,9 +51,8 @@
             return ParseBadPort;
         }
     }
-    ws = [ \t];
-    main := ws* (digit{1,5} > SPSt % SPEn) ws*
-            ',' ws* (digit{1,5} > CPSt % CPEn) ws*;
+    main := space* (digit{1,5} > SPSt % SPEn) space*
+            ',' space* (digit{1,5} > CPSt % CPEn) space*;
 }%%
 
 %% write data;
