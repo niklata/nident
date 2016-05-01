@@ -65,8 +65,6 @@ void IdentClient::do_read()
              inbuf_.append(inBytes_.data(), bytes_xferred);
              if (!process_input()) {
                  state_ = STATE_DONE;
-                 tcp_socket_.cancel();
-                 tcp_socket_.close();
                  return;
              }
              do_read();
@@ -93,10 +91,7 @@ void IdentClient::do_write()
                 do_write();
             else {
                 state_ = STATE_DONE;
-                tcp_socket_.cancel();
-                tcp_socket_.close();
             }
-
         });
 }
 
