@@ -46,7 +46,7 @@
 #include <grp.h>
 #include <signal.h>
 #include <errno.h>
-#include <nk/format.hpp>
+#include <fmt/format.h>
 #include <nk/optionarg.hpp>
 #include <nk/from_string.hpp>
 #include <asio.hpp>

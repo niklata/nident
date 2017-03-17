@@ -30,7 +30,7 @@
 #include <sys/types.h>
 #include <pwd.h>
 
-#include <nk/format.hpp>
+#include <fmt/format.h>
 
 #include "identclient.hpp"
 #include "parse.hpp"

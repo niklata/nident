@@ -26,9 +26,9 @@ endif()
 include_directories("${PROJECT_SOURCE_DIR}"
                     "${PROJECT_SOURCE_DIR}/ncmlib"
                     "${PROJECT_SOURCE_DIR}/asio"
-                    "${PROJECT_SOURCE_DIR}/cppformat")
+                    "${PROJECT_SOURCE_DIR}/fmt")
 add_subdirectory(ncmlib)
-add_subdirectory(cppformat)
+add_subdirectory(fmt)
 
 include_directories ( ${Boost_INCLUDE_DIRS} )
 find_package(Threads)
@@ -76,13 +76,11 @@ set(NIDENT_SRCS
 #  )
 
 add_executable(nident ${RAGEL_IDENTPARSE} ${RAGEL_PARSECFG} ${NIDENT_SRCS})
-target_link_libraries(nident ${CMAKE_THREAD_LIBS_INIT} ncmlib cppformat)
+target_link_libraries(nident ${CMAKE_THREAD_LIBS_INIT} ncmlib fmt)
 
 #add_executable(nl-test ${NLTEST_SRCS})
-#target_link_libraries(nl-test ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
-#                              cppformat)
+#target_link_libraries(nl-test ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES} fmt)
 #
 #add_executable(parsetest ${RAGEL_PARSECFG} ${PTEST_SRCS})
-#target_link_libraries(parsetest ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES}
-#                                ncmlib cppformat)
+#target_link_libraries(parsetest ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES} ncmlib fmt)
 

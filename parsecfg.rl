@@ -30,7 +30,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <pwd.h>
-#include <nk/format.hpp>
+#include <fmt/format.h>
 #include <nk/from_string.hpp>
 #include <nk/scopeguard.hpp>
 #include "asio_addrcmp.hpp"

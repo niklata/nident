@@ -28,7 +28,8 @@
 
 #include <unistd.h>
 #include "netlink.hpp"
-#include <nk/format.hpp>
+#include <fmt/format.h>
+#include <fmt/ostream.h>
 
 Netlink::Netlink(bool v4only) : v4only_(v4only), fd_(-1), socktype_(-1),
     portid_(0), seq_(0) {}
