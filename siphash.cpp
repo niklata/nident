@@ -35,13 +35,13 @@ namespace nk {
 
 #include <stddef.h>
 #include <stdint.h>
-#include <boost/detail/endian.hpp>
 
 static uint64_t FORCE_INLINE rotl(uint64_t x, uint64_t d)
 {
     return (x << d) | (x >> (64 - d));
 }
 
+// XXX: Note that at present, Little Endian is always assumed.
 #ifdef BOOST_BIG_ENDIAN
 static FORCE_INLINE uint64_t bswap(uint64_t x) {
     return x << 56 | ((x << 40) & 0xff000000000000) | ((x << 24) & 0xff0000000000)
