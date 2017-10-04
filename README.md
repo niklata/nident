@@ -219,9 +219,9 @@ of most common identds to all queries.
 
 ## Downloads
 
-* [GitLab](https://github.com/niklata/nident)
-* [BitBucket](https://gitlab.com/niklata/nident)
-* [GitHub](https://bitbucket.com/niklata/nident)
+* [GitLab](https://gitlab.com/niklata/nident)
+* [BitBucket](https://bitbucket.com/niklata/nident)
+* [GitHub](https://github.com/niklata/nident)
 
 ## Portability
 
