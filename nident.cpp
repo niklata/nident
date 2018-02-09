@@ -53,7 +53,6 @@
 extern "C" {
 #include "nk/privilege.h"
 #include "nk/pidfile.h"
-#include "nk/seccomp-bpf.h"
 }
 #include "identclient.hpp"
 #include "netlink.hpp"
@@ -71,7 +70,6 @@ uint64_t gSaltK0 = SALTC1, gSaltK1 = SALTC2;
 static uid_t nident_uid;
 static gid_t nident_gid;
 static bool v4only{false};
-static bool use_seccomp{false};
 static int gflags_detach;
 extern int gflags_quiet;
 
@@ -93,81 +91,6 @@ static void process_signals()
     asio_signal_set.add(SIGINT);
     asio_signal_set.add(SIGTERM);
     asio_signal_set.async_wait([](const std::error_code &, int signum) { io_service.stop(); });
-}
-
-static int enforce_seccomp(bool changed_uidgid)
-{
-    if (!use_seccomp)
-        return 0;
-    struct sock_filter filter[] = {
-        VALIDATE_ARCHITECTURE,
-        EXAMINE_SYSCALL,
-
-#if defined(__x86_64__) || (defined(__arm__) && defined(__ARM_EABI__))
-        ALLOW_SYSCALL(sendmsg),
-        ALLOW_SYSCALL(recvmsg),
-        ALLOW_SYSCALL(sendto), // used for glibc syslog routines
-        ALLOW_SYSCALL(recvfrom),
-        ALLOW_SYSCALL(getpeername),
-        ALLOW_SYSCALL(getsockname),
-        ALLOW_SYSCALL(connect),
-        ALLOW_SYSCALL(socket),
-        ALLOW_SYSCALL(accept),
-        ALLOW_SYSCALL(fcntl),
-        ALLOW_SYSCALL(setsockopt),
-        ALLOW_SYSCALL(shutdown),
-#elif defined(__i386__)
-        ALLOW_SYSCALL(socketcall),
-        ALLOW_SYSCALL(fcntl64),
-#else
-#error Target platform does not support seccomp-filter.
-#endif
-
-        ALLOW_SYSCALL(read),
-        ALLOW_SYSCALL(write),
-        ALLOW_SYSCALL(epoll_wait),
-        ALLOW_SYSCALL(epoll_ctl),
-        ALLOW_SYSCALL(stat),
-        ALLOW_SYSCALL(open),
-        ALLOW_SYSCALL(close),
-        ALLOW_SYSCALL(futex),
-        ALLOW_SYSCALL(fstat),
-        ALLOW_SYSCALL(ioctl),
-        ALLOW_SYSCALL(rt_sigreturn),
-        ALLOW_SYSCALL(rt_sigaction),
-#ifdef __NR_sigreturn
-        ALLOW_SYSCALL(sigreturn),
-#endif
-#ifdef __NR_sigaction
-        ALLOW_SYSCALL(sigaction),
-#endif
-        // Allowed by vDSO
-        ALLOW_SYSCALL(getcpu),
-        ALLOW_SYSCALL(time),
-        ALLOW_SYSCALL(gettimeofday),
-        ALLOW_SYSCALL(clock_gettime),
-
-        // operator new
-        ALLOW_SYSCALL(brk),
-        ALLOW_SYSCALL(mmap),
-        ALLOW_SYSCALL(munmap),
-        ALLOW_SYSCALL(mremap),
-
-        ALLOW_SYSCALL(exit_group),
-        ALLOW_SYSCALL(exit),
-        KILL_PROCESS,
-    };
-    struct sock_fprog prog;
-    memset(&prog, 0, sizeof prog);
-    prog.len = (unsigned short)(sizeof filter / sizeof filter[0]);
-    prog.filter = filter;
-    if (!changed_uidgid && prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0))
-        return -1;
-    if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog))
-        return -1;
-    fmt::print("seccomp filter installed.  Please disable seccomp if you encounter problems.\n");
-    std::fflush(stdout);
-    return 0;
 }
 
 static void print_version(void)
@@ -198,7 +121,7 @@ static void print_version(void)
 enum OpIdx {
     OPT_UNKNOWN, OPT_HELP, OPT_VERSION, OPT_BACKGROUND, OPT_PARANOID,
     OPT_PIDFILE, OPT_CHROOT, OPT_MAXBYTES, OPT_USER, OPT_SALT,
-    OPT_NOIPV6, OPT_SECCOMP, OPT_QUIET
+    OPT_NOIPV6, OPT_QUIET
 };
 static const option::Descriptor usage[] = {
     { OPT_UNKNOWN,    0,  "",           "", Arg::Unknown,
@@ -215,7 +138,6 @@ static const option::Descriptor usage[] = {
     { OPT_USER,       0, "u",            "user",  Arg::String, "\t-u, \t--user  \tUser name that nident should run as." },
     { OPT_SALT,       0, "s",            "salt",  Arg::String, "\t-s, \t--salt  \tString that should be used as salt for hash replies." },
     { OPT_NOIPV6,     0,  "",    "disable-ipv6",    Arg::None, "\t    \t--disable-ipv6  \tHost kernel doesn't support ipv6." },
-    { OPT_SECCOMP,    0,  "", "seccomp-enforce",    Arg::None, "\t    \t--seccomp-enforce  \tEnforce seccomp syscall restrictions." },
     { OPT_QUIET,      0, "q",           "quiet",    Arg::None, "\t-q, \t--quiet  \tDon't log to std(out|err) or syslog." },
     {0,0,0,0,0,0}
 };
@@ -280,7 +202,6 @@ static void process_options(int ac, char *av[])
                 break;
             }
             case OPT_NOIPV6: v4only = true; break;
-            case OPT_SECCOMP: use_seccomp = true; break;
             case OPT_QUIET: gflags_quiet = 1; break;
         }
     }
@@ -341,10 +262,6 @@ static void process_options(int ac, char *av[])
 
     if (nident_uid != 0 || nident_gid != 0)
         nk_set_uidgid(nident_uid, nident_gid, NULL, 0);
-    if (enforce_seccomp(nident_uid || nident_gid)) {
-        fmt::print(stderr, "seccomp filter cannot be installed\n");
-        std::exit(EXIT_FAILURE);
-    }
 }
 
 int main(int ac, char *av[])

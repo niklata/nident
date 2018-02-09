@@ -22,7 +22,6 @@ Buzzword compliance:
 * does not require inetd
 * syslog logging of responses
 * supports chrooting the ident daemon
-* uses seccomp syscall filters
 * uses netlink sockets instead of procfs
 
 I have tried to pay particular attention to ensuring that nident is not
